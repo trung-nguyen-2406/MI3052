@@ -57,48 +57,52 @@ def grad_f(x):
 def projection_C(y):
     """
     P_C(y) = argmin ||z - y||^2 s.t. z1^2 + 2*z1*z2 >= 4, z1 >= 0, z2 >= 0
-    Giải bằng SciPy's minimize (Sequential Least Squares Programming - SLSQP)
+    Using trust-constr method like reference code
     """
+    from scipy.optimize import BFGS, Bounds
     
-    # Hàm mục tiêu của phép chiếu: min ||z - y||^2
+    # Objective: minimize ||z - y||^2 (Euclidean distance squared)
     def objective_proj(z):
-        return (z[0] - y[0])**2 + (z[1] - y[1])**2
-
-    # Các ràng buộc (constraints)
-    # Ràng buộc Bất đẳng thức: g(z) >= 0
-    # Cần biến đổi: z1^2 + 2*z1*z2 - 4 >= 0
-    cons = [
-        {'type': 'ineq', 'fun': lambda z: z[0]**2 + 2*z[0]*z[1] - 4} 
-    ]
+        return np.sum((z - y)**2)
     
-    # Ràng buộc Cận (Bounds): z1 >= 0, z2 >= 0
-    bnds = ((0, None), (0, None))
+    # Constraint: -z[0]^2 - 2*z[0]*z[1] + 4 <= 0  =>  z[0]^2 + 2*z[0]*z[1] - 4 >= 0
+    def g1(z):
+        return -z[0]**2 - 2*z[0]*z[1] + 4
     
-    # Điểm khởi tạo cho solver (thường là y, nhưng cần một điểm hợp lệ gần đó)
-    z0 = np.array([1.5, 1.5]) 
-    if z0[0]**2 + 2*z0[0]*z0[1] < 4:
-        # Nếu z0 không hợp lệ, tìm điểm hợp lệ gần nhất (đơn giản hoá)
-        z0 = np.array([2.0, 0.0])
-        
-    # Giải bài toán tối ưu phụ
+    cons = {
+        'type': 'ineq',
+        'fun': lambda z: np.array([-g1(z)])
+    }
+    
+    # Bounds: z >= 0
+    bounds = Bounds([0, 0], [np.inf, np.inf])
+    
+    # Initial guess: random point (same as reference code)
+    z0 = np.random.rand(2)
+    
+    # Solve using trust-constr with BFGS hessian (same as reference code)
     result = minimize(
-        objective_proj, z0, 
-        method='SLSQP', # Phù hợp cho tối ưu phi tuyến tính (non-linear)
-        bounds=bnds, 
-        constraints=cons, 
-        options={'maxiter': 50}
+        objective_proj, 
+        z0,
+        args=(),
+        jac="2-point",  # Finite difference gradient
+        hess=BFGS(),    # BFGS hessian approximation
+        constraints=cons,
+        method='trust-constr',
+        options={'disp': False},
+        bounds=bounds
     )
     
     if result.success:
         return result.x
     else:
-        # If the projection solver fails, return the fallback initial point
-        print(f"Projection error at y={y}, returning z0.")
-        return z0
+        # Fallback
+        print(f"Projection error at y={y}")
+        return np.array([2.0, 0.0])
 
 # --- 1.3. Thuật toán GDA (Algorithm 1) ---
 
-def gda_solver(x0, lambda0, sigma, kappa, max_iter=100, tol=1e-5):
+def gda_solver(x0, lambda0, sigma, kappa, max_iter=100, tol=1e-8):
     """Thực thi Thuật toán Gradient Descent Adaptive (GDA)"""
     x = np.array(x0, dtype=float)
     lambda_k = float(lambda0)
@@ -120,11 +124,23 @@ def gda_solver(x0, lambda0, sigma, kappa, max_iter=100, tol=1e-5):
         # 2. Adaptive Step Size
         dot_product = np.dot(grad_xk, x_k - x_new)
         RHS = f(x_k) - sigma * dot_product
+        f_new = f(x_new)
         
-        if f(x_new) <= RHS:
+        # Debug info
+        print(f"  grad_xk: {grad_xk}")
+        print(f"  x_k - x_new: {x_k - x_new}")
+        print(f"  dot_product (should be > 0): {dot_product:.8f}")
+        print(f"  sigma * dot_product: {sigma * dot_product:.8f}")
+        
+        if f_new <= RHS:
             lambda_next = lambda_k # Chấp nhận
+            armijo_satisfied = "✓ Accept"
         else:
             lambda_next = kappa * lambda_k # Giảm lambda
+            armijo_satisfied = "✗ Reduce"
+        
+        # Print detailed info at each iteration
+        print(f"Iter {k}: λ={lambda_k:.6f} | f(x_k)={f(x_k):.6f}, f(x_new)={f_new:.6f}, RHS={RHS:.6f} | {armijo_satisfied} → λ_next={lambda_next:.6f}\n")
 
         # Lưu lại dữ liệu cho Manim
         trajectory.append({
@@ -136,10 +152,11 @@ def gda_solver(x0, lambda0, sigma, kappa, max_iter=100, tol=1e-5):
             'lambda_new': lambda_next
         })
 
-        # 3. Kiểm tra dừng
-        if np.linalg.norm(x_new - x_k) < tol and lambda_next == lambda_k:
+        # 3. Kiểm tra dừng (Step 2: If x^(k+1) = x^k then STOP)
+        if np.linalg.norm(x_new - x_k) < tol:
             x = x_new
-            print(f"✅ GDA stopped at step k={k}. x*={x}")
+            lambda_k = lambda_next
+            print(f"✅ GDA stopped at step k={k}. x*={x}, λ={lambda_k:.6f}")
             break
             
         x = x_new
@@ -231,20 +248,24 @@ def neural_network_solver(x0, lr=0.05, max_iter=50, penalty_weight=100.0):
         return final_x, f(final_x), trajectory
 
 # --- 2. Chạy Solver để lấy Dữ liệu cho Manim ---
-# Lưu ý: Chọn x0 phải thỏa mãn ràng buộc: x1^2 + 2*x1*x2 >= 4
-x0 = [2.0, 1.0]     # 2^2 + 2*2*1 = 8 >= 4
-# Increase initial lambda so it has room to change during GDA
-lambda0 = 0.8       
-# Use sigma = 0.8 to allow lambda to update during GDA
-sigma = 0.95         
-kappa = 0.8           
+# Worse initialization far from optimal
+x0_random = np.array([3.0, 0.1])  # Far from optimum
+x0 = projection_C(x0_random)   # Project onto constraint set
+print(f"Initial point (before projection): {x0_random}")
+print(f"Projected initial point: {x0}")
 
-final_x, final_f, trajectory_data = gda_solver(x0, lambda0, sigma, kappa, max_iter=100)
+# Start with small lambda (cannot be 0 or algorithm won't move)
+lambda0 = 1.0      
+# Use sigma = 0.1
+sigma = 0.1         
+kappa = 0.5           
+
+final_x, final_f, trajectory_data = gda_solver(x0, lambda0, sigma, kappa, max_iter=40)
 
 print(f"\nConverged solution: {final_x}, Objective value: {final_f}")
 
 # --- Chạy phương pháp gradient bình thường (neural network / parameter-based) ---
-nn_final_x, nn_final_f, nn_trajectory = neural_network_solver(x0, lr=0.05, max_iter=100, penalty_weight=100.0)
+nn_final_x, nn_final_f, nn_trajectory = neural_network_solver(x0, lr=0.05, max_iter=40, penalty_weight=100.0)
 print(f"\nNN method result: {nn_final_x}, f: {nn_final_f} (torch_enabled={TORCH_AVAILABLE})")
 
 # --- PHẦN 3: MINH HỌA QUÁ TRÌNH TÌM NGHIỆM BẰNG MANIM ---
@@ -327,7 +348,7 @@ class GDAProjectionAnimation(Scene):
 
         path_line = VGroup()
         # For less frequent rendering: accumulate segments and only render every `render_every` steps
-        render_every = 10
+        render_every = 2
         accumulated = []
         last_render_pos = trajectory_data[0]['x_start'].copy()
 
@@ -364,7 +385,8 @@ class GDAProjectionAnimation(Scene):
                 y_dot = Dot(p_y, color=ORANGE, radius=0.05)
 
             # If it's time to render, show accumulated path and arrows
-            if k % render_every == 0:
+            is_last_step = (k == len(trajectory_data) - 1)
+            if k % render_every == 0 or is_last_step:
                 # update info
                 self.play(Transform(info_text, new_info_text), run_time=0.2)
 
@@ -533,7 +555,7 @@ class CombinedComparisonAnimation(Scene):
         gda_path = VGroup()
         nn_path = VGroup()
 
-        render_every = 10
+        render_every = 2
         accumulated_gda = []
         accumulated_nn = []
 
@@ -563,7 +585,8 @@ class CombinedComparisonAnimation(Scene):
                 seg2 = None
 
             # Render only every `render_every` steps: update infos, reveal accumulated segments, move markers visibly
-            if t % render_every == 0:
+            is_last_step = (t == n_steps - 1)
+            if t % render_every == 0 or is_last_step:
                 # update infos
                 if t < n_gda:
                     g = trajectory_data[t]
