@@ -264,9 +264,9 @@ final_x, final_f, trajectory_data = gda_solver(x0, lambda0, sigma, kappa, max_it
 
 print(f"\nConverged solution: {final_x}, Objective value: {final_f}")
 
-# --- Chạy phương pháp gradient bình thường (neural network / parameter-based) ---
+# --- Chạy phương pháp gradient bình thường (gradient descent with penalty) ---
 nn_final_x, nn_final_f, nn_trajectory = neural_network_solver(x0, lr=0.05, max_iter=40, penalty_weight=100.0)
-print(f"\nNN method result: {nn_final_x}, f: {nn_final_f} (torch_enabled={TORCH_AVAILABLE})")
+print(f"\nGradient method result: {nn_final_x}, f: {nn_final_f} (torch_enabled={TORCH_AVAILABLE})")
 
 # --- PHẦN 3: MINH HỌA QUÁ TRÌNH TÌM NGHIỆM BẰNG MANIM ---
 
@@ -438,7 +438,7 @@ class GDAProjectionAnimation(Scene):
 
 
 class CombinedComparisonAnimation(Scene):
-    """Animate GDA (left) and NN gradient method (right) side-by-side.
+    """Animate GDA (left) and standard gradient method (right) side-by-side.
     This does not change the original GDA algorithm implementation; it merely
     visualizes both methods together for direct comparison.
     """
@@ -459,7 +459,7 @@ class CombinedComparisonAnimation(Scene):
             axis_config={"include_numbers": False}
         ).to_edge(RIGHT).shift(0.7*RIGHT)
 
-        title = Text("GDA (Left)  vs  Gradient/NN (Right)").scale(0.7).to_edge(UP)
+        title = Text("GDA (Left)  vs  Gradient Descent (Right)").scale(0.7).to_edge(UP)
         # Appear axes and title sequentially
         self.play(Create(axes_left), run_time=0.7)
         self.play(Create(axes_right), run_time=0.7)
@@ -540,7 +540,7 @@ class CombinedComparisonAnimation(Scene):
         ).arrange(DOWN).scale(0.5).next_to(c_display, DOWN, buff=0.2)
 
         nn_info = VGroup(
-            safe_math("NN: k=0", color=YELLOW_A),
+            safe_math("Gradient: k=0", color=YELLOW_A),
             safe_math("x=(--, --)", color=WHITE),
             safe_math("loss=--", color=GREEN)
         ).arrange(DOWN).scale(0.5).to_edge(RIGHT).shift(1*UP)
@@ -602,7 +602,7 @@ class CombinedComparisonAnimation(Scene):
                 if t < n_nn:
                     nval = nn_trajectory[t]
                     nn_info_new = VGroup(
-                        safe_math(f"NN: k={nval['k']}", color=YELLOW_A),
+                        safe_math(f"Gradient: k={nval['k']}", color=YELLOW_A),
                         safe_math(f"x=({nval['x'][0]:.2f}, {nval['x'][1]:.2f})", color=WHITE),
                         safe_math(f"loss={nval.get('loss', 0):.4f}", color=GREEN),
                         safe_math(f"f={f(np.array(nval['x'])):.4f}", color=TEAL)
@@ -633,7 +633,7 @@ class CombinedComparisonAnimation(Scene):
         # Display final objective values for both methods
         final_stats = VGroup(
             safe_math(f"GDA: x* = ({final_x[0]:.4f}, {final_x[1]:.4f}), f={final_f:.6f}", color=WHITE),
-            safe_math(f"NN: x* = ({nn_final_x[0]:.4f}, {nn_final_x[1]:.4f}), f={nn_final_f:.6f}", color=WHITE)
+            safe_math(f"Gradient: x = ({nn_final_x[0]:.4f}, {nn_final_x[1]:.4f}), f={nn_final_f:.6f}", color=WHITE)
         ).arrange(DOWN).to_edge(DOWN)
         self.play(Write(final_stats))
 
