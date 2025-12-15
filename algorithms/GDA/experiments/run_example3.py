@@ -10,6 +10,7 @@ sys.path.insert(0, '..')
 from src.gda_algorithm import GDAOptimizer
 from src.examples import create_example
 
+np.seterr(divide='ignore', invalid='ignore')
 
 def run_example_3():
     """Run Example 3 individually"""
@@ -20,7 +21,7 @@ def run_example_3():
     
     # Create example with different dimensions
     n_values = [10, 20, 50, 100, 200, 500]
-    
+    # n_values = [10, 20]
     print(f"""
 Problem Definition:
     f(x) = a^T*x + α*x^T*x + β/√(1 + β*x^T*x) * e^T*x
@@ -38,8 +39,8 @@ Comparing Algorithm GDA vs Algorithm GD for different dimensions n.
     print("=" * 80)
     print("COMPUTATIONAL RESULTS FOR EXAMPLE 3")
     print("=" * 80)
-    print(f"{'n':<10} {'GDA f(x*)':<15} {'GDA Iter':<12} {'GDA Time(s)':<12}")
-    print("-" * 50)
+    print(f"{'n':<10}{'GDA f(x*)':<15} {'GDA Iter':<12} {'GDA Time(s)':<12}")
+    print("-" * 80)
     
     results_gda = []
     results_gd = []
@@ -52,13 +53,14 @@ Comparing Algorithm GDA vs Algorithm GD for different dimensions n.
         
         # Calculate Lipschitz constant: L = 4β^(3/2)√n + 3α
         beta = 0.741271
-        alpha = 3 * (beta ** 1.5) / np.sqrt(n + 1)
+        alpha = 3 * (beta ** 1.5) * np.sqrt(n + 1)
         L = 4 * (beta ** 1.5) * np.sqrt(n) + 3 * alpha
         
         # Initial step size for GDA: λ₀ = 5/L
         lambda_0 = 5 / L
         
         # Run GDA
+        # print(f"x0 : {x0}")
         gda = GDAOptimizer(
             func=func,
             grad_func=grad,
@@ -68,7 +70,7 @@ Comparing Algorithm GDA vs Algorithm GD for different dimensions n.
             tol=1e-6,
             lambda_0=lambda_0,
             sigma=0.1,
-            kappa=0.5,
+            kappa=0.1,
             verbose=False
         )
         
@@ -80,32 +82,37 @@ Comparing Algorithm GDA vs Algorithm GD for different dimensions n.
     print()
     
     # Plot comparison for largest dimension
-    print("=" * 80)
-    print(f"DETAILED RESULTS FOR n = {n_values[-1]}")
-    print("=" * 80)
+    # print("=" * 80)
+    # print(f"DETAILED RESULTS FOR n = {n_values[-1]}")
+    # print("=" * 80)
     
-    func, grad, proj, x0, name = create_example(3, n_values[-1])
+    # func, grad, proj, x0, name = create_example(3, n_values[-1])
+    # beta = 0.741271
+    # alpha = 3 * (beta ** 1.5) * np.sqrt(n + 1)
+    # L = 4 * (beta ** 1.5) * np.sqrt(n) + 3 * alpha
     
-    gda = GDAOptimizer(
-        func=func,
-        grad_func=grad,
-        x0=x0,
-        projection_func=proj,
-        max_iter=1000,
-        tol=1e-6,
-        lambda_0=1.0,
-        sigma=0.1,
-        kappa=0.5,
-        verbose=False
-    )
+    # # Initial step size for GDA: λ₀ = 5/L
+    # lambda_0 = 5 / L
+    # gda = GDAOptimizer(
+    #     func=func,
+    #     grad_func=grad,
+    #     x0=x0,
+    #     projection_func=proj,
+    #     max_iter=1000,
+    #     tol=1e-6,
+    #     lambda_0=lambda_0,
+    #     sigma=0.001,
+    #     kappa=0.05,
+    #     verbose=False
+    # )
     
-    gda_result = gda.optimize()
+    # gda_result = gda.optimize()
     
-    print(f"\nGDA Results (n={n_values[-1]}):")
-    print(f"  Optimal value: f(x*) = {gda_result['f']:.6f}")
-    print(f"  Iterations: {gda_result['iterations']}")
-    print(f"  Time: {gda_result['time']:.4f} seconds")
-    print()
+    # print(f"\nGDA Results (n={n_values[-1]}):")
+    # print(f"  Optimal value: f(x*) = {gda_result['f']:.6f}")
+    # print(f"  Iterations: {gda_result['iterations']}")
+    # print(f"  Time: {gda_result['time']:.4f} seconds")
+    # print()
 
 
 if __name__ == "__main__":
