@@ -1,128 +1,155 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import time
-from src.problem.math_example_1 import f, grad_f, g, grad_g
+import sys
+import os
 
-# Nghiệm tối ưu lý thuyết (Theo bài báo Example 1 / 5.2):
-TRUE_OPTIMAL_X = np.array([0.8907, 1.7957])
-TRUE_OPTIMAL_VAL = 0.4094
+# --- Path Setup ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 
-def solve_with_rnn(f, grad_f, g, grad_g, start_point, max_iter=2000, step_size=0.01):
-    x = np.array(start_point, dtype=float)
+# --- Problem Imports ---
+from problem.math_example_1 import MathExample1
+from problem.math_example_2 import MathExample2
+from problem.math_example_3 import MathExample3
+from problem.math_example_4 import MathExample4
 
-    history = {
-        'trajectory': [x.copy()],
-        'obj_values': [f(x)],
-        'g_values': [g(x)],
-        'timestamps': [0]
-    }
+class NeurodynamicRNN:
+    """
+    Implementation of the Neurodynamic approach using Recurrent Neural Network (RNN)
+    Ref: Equations (224) - (238) in the provided document.
+    """
 
-    start_time = time.time()
+    def __init__(self, step_size=1e-3, max_iter=1000):
+        self.step_size = step_size
+        self.max_iter = max_iter
 
-    for i in range(max_iter):
-        # 1. Logic chuyển mạch
-        val_g = g(x)
-        if val_g > 0:
-            c = 0.0      # Vi phạm -> Tắt mục tiêu
-            psi = 1.0    # Bật sửa lỗi
-        else:
-            c = 1.0      # An toàn -> Tắt sửa lỗi
-            psi = 0.0    # Bật mục tiêu
+    def _psi(self, s):
+        # Eq. (220): Psi(s) = 1 if s > 0 else 0
+        return np.where(s > 0, 1.0, 0.0)
 
-        # 2. Tính vận tốc (Phương trình động lực học)
-        # dx/dt = -c*grad_f - psi*grad_g
-        dxdt = -c * grad_f(x) - psi * grad_g(x)
+    def _compute_c(self, x, g_val, A, b):
+        # Eq. (227) & (228): c(x) calculation
+        psi_g = self._psi(g_val)
+        
+        psi_eq = np.array([])
+        if A is not None and b is not None:
+            eq_residual = np.abs(np.dot(A, x) - b)
+            psi_eq = self._psi(eq_residual)
 
-        # 3. Cập nhật (Euler)
-        x = x + dxdt * step_size
-        x = np.maximum(x, 0.0001) # Giữ dương (x >= 0)
+        all_psi = np.concatenate([psi_g, psi_eq]) if psi_eq.size > 0 else psi_g
+        return np.prod(1.0 - all_psi)
 
-        # 4. Lưu dữ liệu
-        curr_time = time.time() - start_time
-        history['trajectory'].append(x.copy())
-        history['obj_values'].append(f(x))
-        history['g_values'].append(g(x))
-        history['timestamps'].append(curr_time)
+    def _subgradient_P(self, g_val, grad_g_val):
+        # Eq. (231): Subgradient of inequality penalty P(x)
+        active_indices = np.where(g_val > 0)[0]
+        
+        # Initialize grad_P with correct shape
+        grad_P = np.zeros(grad_g_val.shape[1])
+        
+        if len(active_indices) > 0:
+            for idx in active_indices:
+                grad_P += grad_g_val[idx]
+        
+        return grad_P
 
-    return x, history
+    def _subgradient_equality(self, x, A, b):
+        # Eq. (237): Subgradient of ||Ax - b||_1
+        if A is None or b is None:
+            return np.zeros_like(x)
 
-# ==========================================
-# PHẦN 3: BỘ CÔNG CỤ ĐÁNH GIÁ
-# ==========================================
+        residual = np.dot(A, x) - b
+        psi_val = self._psi(residual)
+        coeffs = 2.0 * psi_val - 1.0
+        
+        return np.dot(A.T, coeffs)
 
-def evaluate_performance(algorithm_name, final_x, history):
-    trajectory = np.array(history['trajectory'])
-    obj_vals = np.array(history['obj_values'])
-    g_vals = np.array(history['g_values'])
+    def solve(self, problem, x_init):
+        # Eq. (224): Differential inclusion discretization
+        x = np.array(x_init, dtype=np.float64)
+        history = {'f_x': [], 'x': []}
+        start_time = time.time()
 
-    final_obj_val = obj_vals[-1]
-    obj_error = abs(final_obj_val - TRUE_OPTIMAL_VAL)
-    pos_error = np.linalg.norm(final_x - TRUE_OPTIMAL_X)
-    final_violation = max(0, g_vals[-1])
+        print(f"--- Starting RNN Solver [Max Iter: {self.max_iter}, Step: {self.step_size}] ---")
 
-    diffs = np.diff(trajectory, axis=0)
-    path_length = np.sum(np.linalg.norm(diffs, axis=1))
+        for k in range(self.max_iter):
+            # 1. Evaluate Problem Functions
+            f_val = problem.calc_f(x)
+            grad_f = problem.calc_grad_f(x)
+            g_val = problem.calc_g(x)
+            grad_g = problem.calc_grad_g(x)
 
-    # Tính thời gian hội tụ (khi sai số < 1e-3)
-    epsilon = 1e-3
-    converge_idx = np.where(np.abs(obj_vals - TRUE_OPTIMAL_VAL) < epsilon)[0]
-    if len(converge_idx) > 0:
-        time_to_converge = history['timestamps'][converge_idx[0]]
-        iter_to_converge = converge_idx[0]
-    else:
-        time_to_converge = history['timestamps'][-1]
-        iter_to_converge = len(obj_vals)
+            # 2. Compute Neurodynamic Terms
+            c_term = self._compute_c(x, g_val, problem.A, problem.b)
+            term_obj = -1.0 * c_term * grad_f
+            
+            grad_P = self._subgradient_P(g_val, grad_g)
+            term_ineq = -1.0 * grad_P
+            
+            grad_Eq = self._subgradient_equality(x, problem.A, problem.b)
+            term_eq = -1.0 * grad_Eq
 
-    print(f"\n--- BẢNG ĐÁNH GIÁ: {algorithm_name} ---")
-    print(f"1. Điểm kết thúc (Final X):     [{final_x[0]:.4f}, {final_x[1]:.4f}]")
-    print(f"2. Sai số mục tiêu (Cost Err):  {obj_error:.6f}")
-    print(f"3. Sai số vị trí (Dist Err):    {pos_error:.6f}")
-    print(f"4. Vi phạm ràng buộc (Final):   {final_violation:.6f}")
-    print(f"5. Độ dài đường đi (Total Path):{path_length:.4f}")
-    print(f"6. Thời gian hội tụ (s):        {time_to_converge:.4f}s \t(Tại iter {iter_to_converge})")
+            # 3. Update Direction
+            direction = term_obj + term_ineq + term_eq
 
-    return {
-        'obj_error': obj_error,
-        'time_to_converge': time_to_converge
-    }
+            # 4. Euler Update
+            x_next = x + self.step_size * direction
 
+            # Logging
+            history['f_x'].append(f_val)
+            history['x'].append(x.copy())
+
+            x = x_next
+
+        elapsed = time.time() - start_time
+        return x, history, elapsed
 
 if __name__ == "__main__":
-    start_pos = [0.1, 0.1]
+    # --- Configuration Block (Tuned for Convergence) ---
+    
+    # Change this ID to run different examples (1, 2, 3, 4)
+    EXAMPLE_ID = 2
+    
+    if EXAMPLE_ID == 1:
+        # Example 1: Nonconvex 2D
+        problem = MathExample1()
+        x_init = np.array([0.5, 0.5])
+        max_iter = 2000
+        step_size = 0.005
 
-    print(f"Đang chạy RNN từ điểm {start_pos}...")
-    final_x, hist = solve_with_rnn(f, grad_f, g, grad_g, start_pos, max_iter=3000, step_size=0.005)
+    elif EXAMPLE_ID == 2:
+        # Example 2: Nonsmooth Pseudoconvex 4D
+        # Tuned: Warm start to avoid local minima
+        problem = MathExample2()
+        x_init = np.array([-1.0, 0.5, -0.5, 0.0])
+        max_iter = 10000
+        step_size = 0.001
 
-    metrics = evaluate_performance("RNN (Paper 1)", final_x, hist)
+    elif EXAMPLE_ID == 3:
+        # Example 3: Convex n-Dim
+        dim = 10
+        problem = MathExample3(n=dim)
+        x_init = np.ones(dim) * 2.0
+        max_iter = 1000
+        step_size = 0.001
 
-    # Vẽ đồ thị
-    plt.figure(figsize=(12, 4))
+    elif EXAMPLE_ID == 4:
+        # Example 4: Pseudoconvex Large Scale
+        # Tuned: Smart init (0.8) to satisfy equality constraints immediately
+        dim = 10
+        problem = MathExample4(n=dim)
+        x_init = np.ones(dim) * 0.8
+        max_iter = 5000
+        step_size = 0.01
 
-    # Hình 1: Quỹ đạo
-    traj = np.array(hist['trajectory'])
-    plt.subplot(1, 2, 1)
-    plt.plot(traj[:,0], traj[:,1], label='RNN Path')
-    plt.scatter(TRUE_OPTIMAL_X[0], TRUE_OPTIMAL_X[1], c='r', marker='*', s=150, label='Optimal')
-    plt.scatter(start_pos[0], start_pos[1], c='g', label='Start')
+    else:
+        raise ValueError("Invalid Example ID")
 
-    # Vẽ đường ràng buộc g(x)=0 => 4 - x1^2 - 2x1x2 = 0 => x2 = (4 - x1^2)/(2x1)
-    x1_vals = np.linspace(0.1, 2.5, 100)
-    x2_vals = (4 - x1_vals**2) / (2*x1_vals)
-    plt.plot(x1_vals, x2_vals, 'k--', label='Biên g(x)=0')
+    # --- Execution ---
+    rnn = NeurodynamicRNN(step_size=step_size, max_iter=max_iter)
+    x_opt, hist, run_time = rnn.solve(problem, x_init)
 
-    plt.xlim(0, 3)
-    plt.ylim(0, 3)
-    plt.title('Quỹ đạo di chuyển (x1, x2)')
-    plt.legend()
-    plt.grid()
-
-    # Hình 2: Hàm mục tiêu
-    plt.subplot(1, 2, 2)
-    plt.plot(hist['obj_values'])
-    plt.axhline(y=TRUE_OPTIMAL_VAL, color='r', linestyle='--')
-    plt.title('Hội tụ hàm mục tiêu f(x)')
-    plt.xlabel('Iterations')
-    plt.grid()
-
-    plt.tight_layout()
-    plt.show()
+    print(f"Example {EXAMPLE_ID} Results:")
+    print(f"  Optimal X (Head): {x_opt[:5]}")
+    print(f"  Optimal f(x): {problem.calc_f(x_opt)}")
+    print(f"  Time: {run_time:.4f}s")
