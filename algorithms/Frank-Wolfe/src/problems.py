@@ -26,6 +26,7 @@ class Example1:
         # Frank-Wolfe LMO
         # Ràng buộc: -x1^2 - 2x1x2 <= -4
         cons = ({'type': 'ineq', 'fun': lambda s: s[0]**2 + 2*s[0]*s[1] - 4})
+        # Chỉnh bound cho đồ thị dễ nhìn
         bnds = [(0, 5)] * self.n
         # start point = current_x giúp solver chạy nhanh hơn
         res = minimize(lambda s: np.dot(grad, s), current_x, bounds=bnds, constraints=cons, method='SLSQP')

@@ -1,7 +1,7 @@
 import sys
 import os
 import numpy as np
-import matplotlib.pyplot as plt  # [MỚI] Import thư viện vẽ
+import matplotlib.pyplot as plt 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -11,12 +11,11 @@ from src.problems import Example1
 if __name__ == "__main__":
     print("=== EXAMPLE 1: Simple Nonconvex Problem ===")
     
-    # 1. Setup
+    # 1. Khởi tạo bài toán
     prob = Example1(n=2)
-    solver = FrankWolfeSolver(prob, max_iter=1000) # Tăng lên 1000 vòng cho giống ảnh mẫu
+    solver = FrankWolfeSolver(prob, max_iter=1000)
     
-    # 2. Điểm khởi tạo (giống biểu đồ mẫu là bắt đầu từ khoảng 0.5 và 3.0)
-    # Tuy nhiên ta cứ dùng điểm [2, 2] hoặc điểm nào thỏa mãn ràng buộc
+    # 2. Điểm khởi tạo 
     x0 = [2.0, 2.0]
     
     # 3. Chạy thuật toán (Nhận về cả history)
