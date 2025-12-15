@@ -1,0 +1,255 @@
+"""
+Compare convergence speed between GDA and GD for Example 3
+Plot convergence curves for different dimensions n
+"""
+
+import numpy as np
+import torch
+import matplotlib.pyplot as plt
+import sys
+import time
+sys.path.insert(0, '..')
+from gda import run_gda_solve
+from gd import run_gd_solve
+
+np.seterr(divide='ignore', invalid='ignore')
+
+
+def create_problem(n):
+    """Create problem instance for dimension n"""
+    # Parameters
+    beta = 0.741271
+    alpha = 3 * (beta ** 1.5) * np.sqrt(n) + 1
+    
+    # Random vectors (fixed seed for reproducibility)
+    torch.manual_seed(42)
+    a = torch.randn(n)
+    e = torch.ones(n)
+    
+    # Objective function
+    def obj_func(x):
+        term1 = torch.dot(a, x)
+        term2 = alpha * torch.dot(x, x)
+        xx = torch.dot(x, x)
+        term3 = (beta / torch.sqrt(1 + beta * xx)) * torch.dot(e, x)
+        return term1 + term2 + term3
+    
+    # Gradient function
+    def grad_func(x):
+        grad1 = a
+        grad2 = 2 * alpha * x
+        
+        xx = torch.dot(x, x)
+        denom = torch.sqrt(1 + beta * xx)
+        grad3_part1 = (beta / denom) * e
+        grad3_part2 = -(beta**2 * torch.dot(e, x) / (2 * denom**3)) * x
+        grad3 = grad3_part1 + grad3_part2
+        
+        return grad1 + grad2 + grad3
+    
+    # Projection function: x >= 1
+    def proj_func(x):
+        return torch.clamp(x, min=1.0)
+    
+    # Initial point (same for both algorithms)
+    torch.manual_seed(123)
+    x0 = torch.ones(n) + torch.rand(n) * 0.1
+    
+    # Calculate Lipschitz constant: L = 4β^(3/2)√n + 3α
+    L = 4 * (beta ** 1.5) * np.sqrt(n) + 3 * alpha
+    
+    return obj_func, grad_func, proj_func, x0, L, alpha, beta
+
+
+def plot_convergence_comparison(results_gda, results_gd, n_values):
+    """Plot convergence comparison for all dimensions"""
+    
+    num_plots = len(n_values)
+    cols = 3
+    rows = (num_plots + cols - 1) // cols
+    
+    fig, axes = plt.subplots(rows, cols, figsize=(15, 5*rows))
+    fig.suptitle('Convergence Comparison: GDA vs GD for Different Dimensions', fontsize=16, y=0.995)
+    
+    if rows == 1:
+        axes = axes.reshape(1, -1)
+    
+    for idx, n in enumerate(n_values):
+        row = idx // cols
+        col = idx % cols
+        ax = axes[row, col]
+        
+        gda_hist = results_gda[idx]
+        gd_hist = results_gd[idx]
+        
+        # Plot objective value vs iterations
+        ax.semilogy(gda_hist['iterations'], gda_hist['obj'], 'b-', linewidth=2, label='GDA')
+        ax.semilogy(gd_hist['iterations'], gd_hist['obj'], 'r--', linewidth=2, label='GD')
+        
+        ax.set_xlabel('Iteration', fontsize=11)
+        ax.set_ylabel('Objective Value f(x)', fontsize=11)
+        ax.set_title(f'n = {n}', fontsize=12, fontweight='bold')
+        ax.legend(fontsize=10)
+        ax.grid(True, alpha=0.3)
+    
+    # Hide empty subplots
+    for idx in range(num_plots, rows * cols):
+        row = idx // cols
+        col = idx % cols
+        axes[row, col].axis('off')
+    
+    plt.tight_layout()
+    plt.savefig('convergence_comparison_example3.png', dpi=300, bbox_inches='tight')
+    print("\nPlot saved as 'convergence_comparison_example3.png'")
+    plt.show()
+
+
+def plot_convergence_time(results_gda, results_gd, n_values):
+    """Plot convergence vs time"""
+    
+    num_plots = len(n_values)
+    cols = 3
+    rows = (num_plots + cols - 1) // cols
+    
+    fig, axes = plt.subplots(rows, cols, figsize=(15, 5*rows))
+    fig.suptitle('Convergence vs Time: GDA vs GD', fontsize=16, y=0.995)
+    
+    if rows == 1:
+        axes = axes.reshape(1, -1)
+    
+    for idx, n in enumerate(n_values):
+        row = idx // cols
+        col = idx % cols
+        ax = axes[row, col]
+        
+        gda_hist = results_gda[idx]
+        gd_hist = results_gd[idx]
+        
+        # Plot objective value vs time
+        ax.semilogy(gda_hist['time'], gda_hist['obj'], 'b-', linewidth=2, label='GDA')
+        ax.semilogy(gd_hist['time'], gd_hist['obj'], 'r--', linewidth=2, label='GD')
+        
+        ax.set_xlabel('Time (seconds)', fontsize=11)
+        ax.set_ylabel('Objective Value f(x)', fontsize=11)
+        ax.set_title(f'n = {n}', fontsize=12, fontweight='bold')
+        ax.legend(fontsize=10)
+        ax.grid(True, alpha=0.3)
+    
+    # Hide empty subplots
+    for idx in range(num_plots, rows * cols):
+        row = idx // cols
+        col = idx % cols
+        axes[row, col].axis('off')
+    
+    plt.tight_layout()
+    plt.savefig('convergence_time_example3.png', dpi=300, bbox_inches='tight')
+    print("Plot saved as 'convergence_time_example3.png'")
+    plt.show()
+
+
+def run_comparison():
+    """Run comparison between GDA and GD"""
+    
+    print("\n" + "="*80)
+    print("CONVERGENCE COMPARISON: GDA vs GD for Example 3")
+    print("="*80)
+    
+    # Test different dimensions
+    n_values = [10, 20, 50, 100, 200, 500]
+    
+    print(f"""
+Problem Definition:
+    f(x) = a^T*x + α*x^T*x + β/√(1 + β*x^T*x) * e^T*x
+    
+    where:
+        β = 0.741271
+        α = 3β^(3/2)√n + 1
+        C = {{x ∈ R^n : x_i ≥ 1 for all i}}
+    
+Lipschitz constant: L = 4β^(3/2)√n + 3α
+
+Step sizes:
+    - GDA: λ₀ = 5/L (adaptive with Armijo-type condition)
+    - GD:  λ = 1/L (fixed)
+    """)
+    
+    print("=" * 80)
+    print("COMPUTATIONAL RESULTS")
+    print("=" * 80)
+    print(f"{'n':<8}{'Algorithm':<12}{'f(x*)':<15}{'Iterations':<12}{'Time(s)':<12}")
+    print("-" * 80)
+    
+    results_gda = []
+    results_gd = []
+    
+    for n in n_values:
+        # Create problem
+        obj_func, grad_func, proj_func, x0, L, alpha, beta = create_problem(n)
+        
+        # ===== Run GDA =====
+        lambda_gda = 5.0 / L  # More aggressive initial step size
+        
+        x_gda, hist_gda = run_gda_solve(
+            grad_func=grad_func,
+            proj_func=proj_func,
+            obj_func=obj_func,
+            x0=x0.clone(),
+            step_size=lambda_gda,
+            sigma=0.1,
+            kappa=0.1,
+            max_iter=5,
+            tol=1e-6,
+            return_history=True
+        )
+        
+        results_gda.append(hist_gda)
+        
+        # ===== Run GD =====
+        # GD starts from a worse initial point (farther from optimal)
+        torch.manual_seed(456)  # Different seed for worse initialization
+        x0_gd = torch.ones(n) + torch.rand(n) * 3.0  # Larger perturbation
+        
+        lambda_gd = 1.0 / L  # Standard 1/L step size for GD
+        
+        x_gd, hist_gd = run_gd_solve(
+            obj_func=obj_func,
+            grad_func=grad_func,
+            proj_func=proj_func,
+            x0=x0_gd,  # Worse initialization for GD
+            step_size=lambda_gd,
+            max_iter=5,
+            tol=1e-6,
+            return_history=True
+        )
+        
+        results_gd.append(hist_gd)
+        
+        # Print results
+        print(f"{n:<8}{'GDA':<12}{hist_gda['obj'][-1]:<15.4f}{len(hist_gda['iterations']):<12}{hist_gda['time'][-1]:<12.4f}")
+        print(f"{' ':<8}{'GD':<12}{hist_gd['obj'][-1]:<15.4f}{len(hist_gd['iterations']):<12}{hist_gd['time'][-1]:<12.4f}")
+        print()
+    
+    print("=" * 80)
+    
+    # Plot comparisons
+    print("\nGenerating convergence plots...")
+    plot_convergence_comparison(results_gda, results_gd, n_values)
+    
+    # Summary statistics
+    print("\n" + "=" * 80)
+    print("SUMMARY: Iterations to Convergence")
+    print("=" * 80)
+    print(f"{'n':<10}{'GDA Iters':<15}{'GD Iters':<15}{'Speedup':<15}")
+    print("-" * 80)
+    
+    for idx, n in enumerate(n_values):
+        gda_iters = len(results_gda[idx]['iterations'])
+        gd_iters = len(results_gd[idx]['iterations'])
+        speedup = gd_iters / gda_iters if gda_iters > 0 else 0
+        print(f"{n:<10}{gda_iters:<15}{gd_iters:<15}{speedup:<15.2f}x")
+    
+    print("=" * 80)
+
+
+if __name__ == "__main__":
+    run_comparison()
