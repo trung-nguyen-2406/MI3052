@@ -1,15 +1,20 @@
 import torch
+import time
 
-def run_gda_solve(grad_func, proj_func, obj_func, x0, step_size, sigma, kappa, max_iter = 1000, tol = 1e-6):
+def run_gda_solve(grad_func, proj_func, obj_func, x0, step_size, sigma, kappa, max_iter = 1000, tol = 1e-6, return_history=False):
     """
     grad_func(x) -> gradient tensor
     proj_func(x) -> projected x (or None for identity)
     obj_func(x) -> scalar objective (for history)
     step_size (lamda0) can be float  -> float
-    Returns x where history is dict with lists 'x' and 'obj'.
+    return_history: if True, returns (x, history) else just x
     """
     x = x0.clone().detach()
-    # history = {'x': [], 'obj': []}
+    
+    if return_history:
+        history = {'iterations': [], 'time': [], 'obj': []}
+        start_time = time.time()
+    
     for k in range(int(max_iter)):
         g = grad_func(x)
         if g is None:
@@ -17,8 +22,18 @@ def run_gda_solve(grad_func, proj_func, obj_func, x0, step_size, sigma, kappa, m
         x_new = proj_func(x - step_size * g)
         step_size = kappa * step_size if (obj_func(x_new) > obj_func(x) - sigma * torch.inner(g, x - x_new)) else step_size
 
-        if (torch.norm(x_new - x) < tol) : return x_new
+        if return_history:
+            history['iterations'].append(k)
+            history['time'].append(time.time() - start_time)
+            history['obj'].append(float(obj_func(x_new)))
+        
+        # Only check convergence if not tracking history (for plotting, run full iterations)
+        if not return_history and (torch.norm(x_new - x) < tol):
+            return x_new
         x = x_new
+    
+    if return_history:
+        return x, history
     return x
 
 # def run_gda_minimax(x0, y0, grad_x, grad_y, proj_x=None, proj_y=None,

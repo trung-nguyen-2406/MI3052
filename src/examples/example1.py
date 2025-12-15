@@ -55,11 +55,12 @@ def proj_func(x):
 
 
 def run_example():
-    x0 = torch.tensor([-1.2, 1.0], dtype=torch.float64)
-    sigma = 1e-4        
-    kappa = 0.3         
+    # Feasible starting point, but far from optimum
+    x0 = torch.tensor([3.0, 2.0], dtype=torch.float64)
+    sigma = 0.1        
+    kappa = 0.5         
 
-    x_opt = run_gda_solve(grad_func, proj_func, obj_func, x0, step_size = 0.0215, sigma = sigma, kappa = kappa, max_iter = 2000, tol=1e-8)
+    x_opt = run_gda_solve(grad_func, proj_func, obj_func, x0, step_size=0.1, sigma=sigma, kappa=kappa, max_iter=2000, tol=1e-8)
     print("x_opt =", x_opt)
     print("f(x_opt)", obj_func(x_opt))
     return x_opt
