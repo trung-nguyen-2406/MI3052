@@ -180,7 +180,9 @@ class Example3:
         # Use fixed seed for reproducibility - a must be in ℝⁿ₊₊ (all positive)
         np.random.seed(42)
         self.a = np.abs(np.random.randn(n))  # Ensure a > 0
-        self.e = np.ones(n)
+        self.e = np.array([i for i in range(1, n + 1)])
+        # print(self.e)
+        # print(self.a)
         self.beta = 0.741271
         self.alpha = 3 * (self.beta ** 1.5) * np.sqrt(n + 1)
     
@@ -213,13 +215,96 @@ class Example3:
         
         return grad
     
+    # def projection(self, x: np.ndarray) -> np.ndarray:
+    #     """Project onto feasible set C = {x : xi ≥ 1 for all i}"""
+    #     return np.maximum(x, 1.0)
+
+    # def projection(sefl, v : np.ndarray):
+    #     from scipy.optimize import root_scalar
+    #     """
+    #     Tính hình chiếu Euclide của v lên tập C = {x > 0 : prod(x) >= 1}.
+        
+    #     Parameters:
+    #     v (np.array): Vector đầu vào (có thể là kết quả của bước Gradient Descent).
+        
+    #     Returns:
+    #     x (np.array): Hình chiếu của v lên tập C.
+    #     """
+    #     if np.all(v > 0) and np.prod(v) >= 1:
+    #         return v
+        
+    #     def constraint_func(mu):
+    #         # Tính x dựa trên mu
+    #         # mu phải dương. Sử dụng broadcasting của numpy.
+    #         delta = np.sqrt(v**2 + 4 * mu)
+    #         x_mu = (v + delta) / 2
+    #         # Điều kiện biên là tích x_i = 1, hay tổng ln(x_i) = 0
+    #         return np.sum(np.log(x_mu))
+
+    #     upper_bound = 1.0
+    #     while constraint_func(upper_bound) < 0:
+    #         upper_bound *= 10
+            
+    #     sol = root_scalar(constraint_func, bracket=[0, upper_bound], method='brentq')
+    #     mu_opt = sol.root
+    #     x_projected = (v + np.sqrt(v**2 + 4 * mu_opt)) / 2
+        
+    #     return x_projected
+
+    # def projection(self, z : np.ndarray, eps=1e-12):
+    #     z_pos = np.maximum(z, eps)
+    #     log_prod = np.sum(np.log(z_pos))
+
+    #     if log_prod >= 0:  # log(1) = 0
+    #         return z_pos
+
+    #     n = z_pos.size
+    #     t = np.exp(-log_prod / n)
+    #     return t * z_pos
+
     def projection(self, x: np.ndarray) -> np.ndarray:
-        """Project onto feasible set C = {x : xi ≥ 1 for all i}"""
-        return np.maximum(x, 1.0)
+        from scipy.optimize import root_scalar
+        """
+        Phép chiếu vector x lên tập C = {z in R++^n : prod(z) >= 1}.
+        Bài toán: min ||z - x||^2 s.t. sum(log(z_i)) >= 0
+        """
+        # 1. Kiểm tra nếu x đã thuộc C (Tích x_i >= 1 hay Tổng log(x_i) >= 0)
+        # Sử dụng log để tránh tràn số (overflow) với n lớn
+        if np.sum(np.log(x)) >= 0:
+            return x
+
+        # 2. Nếu không, điểm chiếu nằm trên biên (prod(z) = 1)
+        # Chúng ta cần tìm nhân tử Lagrange mu > 0 sao cho:
+        # sum( log( (x_i + sqrt(x_i^2 + 4*mu)) / 2 ) ) = 0
+        
+        def equation(mu):
+            # Công thức nghiệm từ điều kiện KKT: z_i = (x_i + sqrt(x_i^2 + 4*mu)) / 2
+            # mu là biến số cần tìm
+            z = (x + np.sqrt(x**2 + 4 * mu)) / 2.0
+            return np.sum(np.log(z))
+
+        # 3. Giải phương trình tìm mu (mu phải dương)
+        # Hàm log tăng dần theo mu, nên ta có thể dùng phương pháp Brent hoặc Bisect
+        # Bracket [0, 1e5] là khoảng tìm kiếm, có thể cần chỉnh nếu mu quá lớn
+        try:
+            sol = root_scalar(equation, bracket=[0, 1e6], method='brentq')
+            mu_opt = sol.root
+        except ValueError:
+            # Trường hợp hiếm: nếu không tìm thấy nghiệm trong khoảng, mở rộng khoảng
+            sol = root_scalar(equation, bracket=[0, 1e12], method='brentq')
+            mu_opt = sol.root
+
+        # 4. Tính vector kết quả z dựa trên mu tối ưu
+        z_projected = (x + np.sqrt(x**2 + 4 * mu_opt)) / 2.0
+        
+        return z_projected    
     
     def feasible_point(self) -> np.ndarray:
         """Return a feasible initial point (all ones)"""
-        return np.ones(self.n)
+        np.random.seed(42)
+        x = np.random.rand(1, self.n).tolist()[0]
+        return x
+        # return np.random.uniform(low = -100, high = 100, size = self.n)
 
 
 class Example4:
@@ -241,10 +326,11 @@ class Example4:
     def __init__(self, n: int = 10):
         self.n = n
         # Create ρ vector
-        self.rho = np.ones(n)
-        for i in range(n):
-            if i >= n // 2:
-                self.rho[i] = 3.0
+        np.random.seed(42)
+        self.rho = abs(np.random.uniform(low = 0, high = 100, size = self.n))
+        # for i in range(n):
+        #     if i >= n // 2:
+        #         self.rho[i] = 3.0
         
         # Create constraint matrix A (1×n)
         self.A = np.ones(n)
@@ -253,6 +339,7 @@ class Example4:
                 self.A[i] = 3.0
         
         self.b = 16.0
+        # print(self.rho)
     
     def objective(self, x: np.ndarray) -> float:
         """Objective function f(x) = -exp(-Σ(xi^2/ρi^2))"""
@@ -300,18 +387,18 @@ class Example4:
         # Solve projection problem
         result = minimize(objective, x.copy(), method='SLSQP', 
                          constraints=constraints,
-                         options={'ftol': 1e-10, 'maxiter': 200})
+                         options={'ftol': 1e-10, 'maxiter': 100})
         
-        if result.success:
-            return result.x
-        else:
-            # Fallback: project to equality only
-            Ax = np.dot(self.A, x)
-            A_norm_sq = np.dot(self.A, self.A)
-            lambda_val = (self.b - Ax) / A_norm_sq
-            return x + lambda_val * self.A
+        return result.x
+        # if result.success:
+        # else:
+        #     # Fallback: project to equality only
+        #     Ax = np.dot(self.A, x)
+        #     A_norm_sq = np.dot(self.A, self.A)
+        #     lambda_val = (self.b - Ax) / A_norm_sq
+        #     return x + lambda_val * self.A
         
-        return x_proj
+        # return x_proj
     
     def feasible_point(self) -> np.ndarray:
         """Return a feasible initial point"""
@@ -320,7 +407,7 @@ class Example4:
         x = np.random.randn(self.n) * 2.0
         
         # Project to satisfy Ax = b
-        x = self.projection(x)
+        # x = self.projection(x)
         
         return x
 
