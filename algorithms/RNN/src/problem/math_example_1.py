@@ -1,39 +1,35 @@
 import numpy as np
 
-def f(x):
-    """ Hàm mục tiêu: f(x) """
-    x1, x2 = x[0], x[1]
-    tu = x1**2 + x2**2 + 3
-    mau = 1 + 2*x1 + 8*x2
-    return tu / mau
+class MathExample1:
+    def __init__(self):
+        self.A = None
+        self.b = None
 
-def grad_f(x):
-    """ Đạo hàm f(x) """
-    x1, x2 = x[0], x[1]
-    tu = x1**2 + x2**2 + 3
-    mau = 1 + 2*x1 + 8*x2
+    def calc_f(self, x):
+        # Eq. (240)
+        num = x[0]**2 + x[1]**2 + 3
+        den = 1 + 2*x[0] + 8*x[1]
+        return num / den
 
-    # Đạo hàm u'v - uv' / v^2
-    # u = x1^2 + x2^2 + 3  => u'x1 = 2x1, u'x2 = 2x2
-    # v = 1 + 2x1 + 8x2    => v'x1 = 2,   v'x2 = 8
+    def calc_grad_f(self, x):
+        # Gradient of fractional function
+        num = x[0]**2 + x[1]**2 + 3
+        den = 1 + 2*x[0] + 8*x[1]
+        
+        grad_num = np.array([2*x[0], 2*x[1]])
+        grad_den = np.array([2.0, 8.0])
+        
+        return (grad_num * den - num * grad_den) / (den**2)
 
-    df_dx1 = (2*x1 * mau - tu * 2) / (mau**2)
-    df_dx2 = (2*x2 * mau - tu * 8) / (mau**2)
-    return np.array([df_dx1, df_dx2])
+    def calc_g(self, x):
+        # Eq. (260)
+        g1 = -x[0]**2 - 2*x[0]*x[1] + 4
+        g2 = -x[0] 
+        g3 = -x[1]
+        return np.array([g1, g2, g3])
 
-def g(x):
-    """
-    Ràng buộc: -x1^2 - 2x1x2 <= -4
-    Chuyển vế thành g(x) <= 0:  4 - x1^2 - 2x1x2 <= 0
-    """
-    x1, x2 = x[0], x[1]
-    return 4 - x1**2 - 2*x1*x2
-
-def grad_g(x):
-    """ Đạo hàm g(x) """
-    x1, x2 = x[0], x[1]
-    # dg/dx1 = -2x1 - 2x2
-    dg_dx1 = -2*x1 - 2*x2
-    # dg/dx2 = -2x1
-    dg_dx2 = -2*x1
-    return np.array([dg_dx1, dg_dx2])
+    def calc_grad_g(self, x):
+        grad_g1 = np.array([-2*x[0] - 2*x[1], -2*x[0]])
+        grad_g2 = np.array([-1.0, 0.0])
+        grad_g3 = np.array([0.0, -1.0])
+        return np.array([grad_g1, grad_g2, grad_g3])
