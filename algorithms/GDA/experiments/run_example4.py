@@ -49,7 +49,7 @@ from Liu et al. (2022) for different dimensions n.
         func, grad, proj, x0, name = create_example(4, n)
         
         # Fixed lambda_0 that works well
-        lambda_0 = 1.0
+        lambda_0 = 0.5
         
         # Run GDA with fixed 10 iterations as per paper
         gda = GDAOptimizer(
@@ -80,32 +80,32 @@ from Liu et al. (2022) for different dimensions n.
     print()
     
     # Plot comparison for largest dimension
-    print("=" * 80)
-    print(f"DETAILED RESULTS FOR n = {n_values[-1]}")
-    print("=" * 80)
+    # print("=" * 80)
+    # print(f"DETAILED RESULTS FOR n = {n_values[-1]}")
+    # print("=" * 80)
     
-    func, grad, proj, x0, name = create_example(4, n_values[-1])
+    # func, grad, proj, x0, name = create_example(4, n_values[-1])
     
-    gda = GDAOptimizer(
-        func=func,
-        grad_func=grad,
-        x0=x0,
-        projection_func=proj,
-        max_iter=1000,
-        tol=1e-6,
-        lambda_0=1.0,
-        sigma=0.1,
-        kappa=0.5,
-        verbose=False
-    )
+    # gda = GDAOptimizer(
+    #     func=func,
+    #     grad_func=grad,
+    #     x0=x0,
+    #     projection_func=proj,
+    #     max_iter=1000,
+    #     tol=1e-6,
+    #     lambda_0=1.0,
+    #     sigma=0.1,
+    #     kappa=0.5,
+    #     verbose=False
+    # )
     
-    gda_result = gda.optimize()
+    # gda_result = gda.optimize()
     
-    print(f"\nGDA Results (n={n_values[-1]}):")
-    print(f"  Optimal value: f(x*) = {gda_result['f']:.6f}")
-    print(f"  Iterations: {gda_result['iterations']}")
-    print(f"  Time: {gda_result['time']:.4f} seconds")
-    print()
+    # print(f"\nGDA Results (n={n_values[-1]}):")
+    # print(f"  Optimal value: f(x*) = {gda_result['f']:.6f}")
+    # print(f"  Iterations: {gda_result['iterations']}")
+    # print(f"  Time: {gda_result['time']:.4f} seconds")
+    # print()
 
 
 if __name__ == "__main__":
