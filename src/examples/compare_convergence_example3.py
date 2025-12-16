@@ -163,7 +163,7 @@ Problem Definition:
     
     where:
         β = 0.741271
-        α = 3β^(3/2)√n + 1
+        α = 3β^(3/2)√(n + 1)
         C = {{x ∈ R^n : x_i ≥ 1 for all i}}
     
 Lipschitz constant: L = 4β^(3/2)√n + 3α
@@ -193,11 +193,11 @@ Step sizes:
             grad_func=grad_func,
             proj_func=proj_func,
             obj_func=obj_func,
-            x0=x0.clone(),
+            x0=torch.ones(n) * 36.0 ,
             step_size=lambda_gda,
             sigma=0.1,
             kappa=0.1,
-            max_iter=5,
+            max_iter=10,
             tol=1e-6,
             return_history=True
         )
@@ -206,7 +206,6 @@ Step sizes:
         
         # ===== Run GD =====
         # GD starts from a worse initial point (farther from optimal)
-        torch.manual_seed(456)  # Different seed for worse initialization
         x0_gd = torch.ones(n) + torch.rand(n) * 3.0  # Larger perturbation
         
         lambda_gd = 1.0 / L  # Standard 1/L step size for GD
@@ -215,9 +214,9 @@ Step sizes:
             obj_func=obj_func,
             grad_func=grad_func,
             proj_func=proj_func,
-            x0=x0_gd,  # Worse initialization for GD
+            x0= torch.ones(n) * 36.0 ,  # Worse initialization for GD
             step_size=lambda_gd,
-            max_iter=5,
+            max_iter=10,
             tol=1e-6,
             return_history=True
         )
