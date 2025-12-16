@@ -1,15 +1,29 @@
 import sys
 import os
-import torch
 
-# Fix import path if needed
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+project_root = os.path.dirname(current_dir)
+
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+
+import torch 
+
 try:
-    from gd import run_gd_solver
-    from math_example3 import Example3Problem
-except ImportError:
     from src.algorithms.gd import run_gd_solver
-    from src.problems.math_example3 import Example3Problem
+    from src.problems.math_example3 import Example3Problem 
+except ImportError as e:
+    print(f"Vẫn lỗi Import: {e}")
+    print(f"Đường dẫn đã thêm: {project_root}")
 
+if __name__ == "__main__":
+    # Experiment parameters for Algorithm 2
+    N_DIM = 50
+    MAX_ITER = 1000
+    # ... code tiếp theo của bạn
 if __name__ == "__main__":
     # Experiment parameters for Algorithm 2
     N_DIM = 50
