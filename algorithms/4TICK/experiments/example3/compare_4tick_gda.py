@@ -201,8 +201,8 @@ def run_4tick_method(problem: Example3Problem, x0: np.ndarray, max_iter: int = 5
     """Chạy phương pháp 4TICK Projected Gradient"""
     if alpha_func is None:
         dim = problem.n  # số chiều
-        alpha_func = lambda n: 1 / n
-        alpha_desc = f"α_n = 1/n"
+        alpha_func = lambda n: dim / n
+        alpha_desc = f"α_n = {dim}/n"
     else:
         alpha_desc = method_name
     
@@ -335,7 +335,7 @@ def compare_algorithms_for_n(n: int, max_iter: int = 5000):
     print(f"  λ_0_GDA = 5/L = {problem.step_gda_initial:.6f}")
     
     # Điểm khởi đầu: x0 = (2, 2, ..., 2)
-    x0 = np.ones(n) * 50.0
+    x0 = np.ones(n) * 5.0
     print(f"\nĐiểm khởi đầu: x0 = (2, 2, ..., 2)")
     
     # Chạy 4TICK
