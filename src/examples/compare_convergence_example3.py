@@ -12,6 +12,10 @@ sys.path.insert(0, '..')
 from gda import run_gda_solve
 from gd import run_gd_solve
 
+import warnings
+
+# Tắt các cảnh báo liên quan đến Deprecation (tính năng sắp bỏ)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 np.seterr(divide='ignore', invalid='ignore')
 
 
@@ -48,8 +52,45 @@ def create_problem(n):
         return grad1 + grad2 + grad3
     
     # Projection function: x >= 1
+    # def proj_func(x):
+    #     return torch.clamp(x, min=1.0)
+
     def proj_func(x):
-        return torch.clamp(x, min=1.0)
+        from scipy.optimize import root_scalar
+        """
+        Phép chiếu vector x lên tập C = {z in R++^n : prod(z) >= 1}.
+        Bài toán: min ||z - x||^2 s.t. sum(log(z_i)) >= 0
+        """
+        # 1. Kiểm tra nếu x đã thuộc C (Tích x_i >= 1 hay Tổng log(x_i) >= 0)
+        # Sử dụng log để tránh tràn số (overflow) với n lớn
+        if torch.sum(torch.log(x)) >= 0:
+            return x
+
+        # 2. Nếu không, điểm chiếu nằm trên biên (prod(z) = 1)
+        # Chúng ta cần tìm nhân tử Lagrange mu > 0 sao cho:
+        # sum( log( (x_i + sqrt(x_i^2 + 4*mu)) / 2 ) ) = 0
+        
+        def equation(mu):
+            # Công thức nghiệm từ điều kiện KKT: z_i = (x_i + sqrt(x_i^2 + 4*mu)) / 2
+            # mu là biến số cần tìm
+            z = (x + torch.sqrt(x**2 + 4 * mu)) / 2.0
+            return torch.sum(torch.log(z))
+
+        # 3. Giải phương trình tìm mu (mu phải dương)
+        # Hàm log tăng dần theo mu, nên ta có thể dùng phương pháp Brent hoặc Bisect
+        # Bracket [0, 1e5] là khoảng tìm kiếm, có thể cần chỉnh nếu mu quá lớn
+        try:
+            sol = root_scalar(equation, bracket=[0, 1e6], method='brentq')
+            mu_opt = sol.root
+        except ValueError:
+            # Trường hợp hiếm: nếu không tìm thấy nghiệm trong khoảng, mở rộng khoảng
+            sol = root_scalar(equation, bracket=[0, 1e12], method='brentq')
+            mu_opt = sol.root
+
+        # 4. Tính vector kết quả z dựa trên mu tối ưu
+        z_projected = (x + np.sqrt(x**2 + 4 * mu_opt)) / 2.0
+        
+        return z_projected    
     
     # Initial point (same for both algorithms)
     torch.manual_seed(123)
@@ -197,7 +238,7 @@ Step sizes:
             step_size=lambda_gda,
             sigma=0.1,
             kappa=0.1,
-            max_iter=5,
+            max_iter=7,
             tol=1e-6,
             return_history=True
         )
@@ -217,7 +258,7 @@ Step sizes:
             proj_func=proj_func,
             x0=x0_gd,  # Worse initialization for GD
             step_size=lambda_gd,
-            max_iter=5,
+            max_iter=7,
             tol=1e-6,
             return_history=True
         )
