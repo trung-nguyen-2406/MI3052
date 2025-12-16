@@ -200,8 +200,9 @@ def run_4tick_method(problem: Example3Problem, x0: np.ndarray, max_iter: int = 5
                      alpha_func=None, method_name="4TICK"):
     """Chạy phương pháp 4TICK Projected Gradient"""
     if alpha_func is None:
-        alpha_func = lambda n: 1.0 / n
-        alpha_desc = "α_n = 1/n"
+        dim = problem.n  # số chiều
+        alpha_func = lambda n: 1 / n
+        alpha_desc = f"α_n = 1/n"
     else:
         alpha_desc = method_name
     
@@ -334,7 +335,7 @@ def compare_algorithms_for_n(n: int, max_iter: int = 5000):
     print(f"  λ_0_GDA = 5/L = {problem.step_gda_initial:.6f}")
     
     # Điểm khởi đầu: x0 = (2, 2, ..., 2)
-    x0 = np.ones(n) * 2.0
+    x0 = np.ones(n) * 50.0
     print(f"\nĐiểm khởi đầu: x0 = (2, 2, ..., 2)")
     
     # Chạy 4TICK
@@ -384,7 +385,7 @@ def plot_convergence(all_results, output_dir):
     
     # Tạo figure với 2x3 subplots
     fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    fig.suptitle('So sánh tốc độ hội tụ: 4TICK vs GDA', fontsize=16, fontweight='bold')
+    fig.suptitle('So sánh tốc độ hội tụ: 4TICK (α_n = 1/n) vs GDA', fontsize=16, fontweight='bold')
     
     axes = axes.flatten()
     
@@ -401,7 +402,7 @@ def plot_convergence(all_results, output_dir):
         iters_gda = range(len(f_hist_gda))
         
         # Plot
-        ax.semilogy(iters_4tick, f_hist_4tick, 'b-', linewidth=2, label='4TICK', alpha=0.7)
+        ax.semilogy(iters_4tick, f_hist_4tick, 'b-', linewidth=2, label='4TICK (α_n = dim/n)', alpha=0.7)
         ax.semilogy(iters_gda, f_hist_gda, 'r-', linewidth=2, label='GDA', alpha=0.7)
         
         ax.set_xlabel('Iterations', fontsize=10)
@@ -433,12 +434,12 @@ def plot_convergence(all_results, output_dir):
     x = np.arange(len(n_vals))
     width = 0.35
     
-    bars1 = ax2.bar(x - width/2, iters_4tick, width, label='4TICK', color='blue', alpha=0.7)
+    bars1 = ax2.bar(x - width/2, iters_4tick, width, label='4TICK (α_n = dim/n)', color='blue', alpha=0.7)
     bars2 = ax2.bar(x + width/2, iters_gda, width, label='GDA', color='red', alpha=0.7)
     
     ax2.set_xlabel('Dimension n', fontsize=12, fontweight='bold')
     ax2.set_ylabel('Number of Iterations', fontsize=12, fontweight='bold')
-    ax2.set_title('So sánh số iterations: 4TICK vs GDA', fontsize=14, fontweight='bold')
+    ax2.set_title('So sánh số iterations: 4TICK (α_n = dim/n) vs GDA', fontsize=14, fontweight='bold')
     ax2.set_xticks(x)
     ax2.set_xticklabels(n_vals)
     ax2.legend(fontsize=10)
