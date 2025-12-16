@@ -23,7 +23,7 @@ def create_problem(n):
     """Create problem instance for dimension n"""
     # Parameters
     beta = 0.741271
-    alpha = 3 * (beta ** 1.5) * np.sqrt(n) + 1
+    alpha = 3 * (beta ** 1.5) * np.sqrt(n + 1)
     
     # Random vectors (fixed seed for reproducibility)
     torch.manual_seed(42)
@@ -238,7 +238,7 @@ Step sizes:
             step_size=lambda_gda,
             sigma=0.1,
             kappa=0.1,
-            max_iter=5,
+            max_iter=10,
             tol=1e-6,
             return_history=True
         )
@@ -257,7 +257,7 @@ Step sizes:
             proj_func=proj_func,
             x0= torch.ones(n) * 36.0 ,  # Worse initialization for GD
             step_size=lambda_gd,
-            max_iter=5,
+            max_iter=10,
             tol=1e-6,
             return_history=True
         )
