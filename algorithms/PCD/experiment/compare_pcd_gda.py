@@ -19,7 +19,7 @@ if gda_src not in sys.path: sys.path.insert(0, gda_src)
 try:
     from problems.math_example1 import NonConvexProblem
     from algorithms.pcd import run_pcd
-    from gda_algorithm import GDAOptimizer  # Import from sibling directory
+    from gda_algorithm import GDAOptimizer
 except ImportError as e:
     print(f"Import Error: {e}")
     print("Please ensure 'GDA' folder exists parallel to 'PCD' folder.")
@@ -37,7 +37,6 @@ def main():
     print(f"Start Point: {x0}")
 
     # --- 2. Run PCD (Projected Coordinate Descent) ---
-    # Note: PCD works well with LR=0.5 for this specific problem
     pcd_lr = 0.5
     print(f"\nRunning PCD (Fixed LR = {pcd_lr})...")
 
@@ -55,9 +54,8 @@ def main():
     print(f"-> PCD Done: f(x*)={pcd_vals[-1]:.6f}, Time={pcd_time:.4f}s")
 
     # --- 3. Run GDA (Gradient Descent Adaptive) ---
-    # Constraint: lambda_0 near 1.0 (compliant with paper remarks)
     gda_lambda = 1.0
-    gda_sigma = 1e-4  # Standard Armijo condition
+    gda_sigma = 1e-4
 
     print(f"\nRunning GDA (Adaptive, Start λ={gda_lambda})...")
 
@@ -80,26 +78,44 @@ def main():
 
     print(f"-> GDA Done: f(x*)={gda_vals[-1]:.6f}, Time={gda_time:.4f}s")
 
-    # --- 4. Visualization (Clean Chart) ---
-    plt.figure(figsize=(10, 6))
+    # --- 4. Visualization (Dual Charts) ---
+    # Create a figure with 2 subplots side-by-side
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 
-    # Only plotting PCD and GDA as requested
-    plt.plot(pcd_vals, 'r-', label='PCD Algorithm', linewidth=2)
-    plt.plot(gda_vals, 'b--', label='GDA Algorithm', linewidth=2)
+    # --- Chart 1: Convergence Comparison ---
+    ax1.plot(pcd_vals, 'r-', label='PCD Algorithm', linewidth=2)
+    ax1.plot(gda_vals, 'b--', label='GDA Algorithm', linewidth=2)
+    ax1.axhline(y=0.4094, color='gray', linestyle=':', alpha=0.5, label='Optimal (Paper)')
 
-    # Optional: Reference line (can comment out if strictly unwanted)
-    plt.axhline(y=0.4094, color='gray', linestyle=':', alpha=0.5, label='Optimal (Paper)')
+    ax1.set_title(f'Convergence Comparison (f(x) over Iterations)')
+    ax1.set_xlabel('Iteration')
+    ax1.set_ylabel('Objective Value')
+    ax1.legend()
+    ax1.grid(True, linestyle='--', alpha=0.5)
+    ax1.set_ylim(0.40, 0.48)  # Focus on convergence zone
 
-    plt.title(f'Convergence Comparison: PCD vs GDA')
-    plt.xlabel('Iteration')
-    plt.ylabel('Objective Value')
-    plt.legend()
-    plt.grid(True, linestyle='--', alpha=0.5)
+    # --- Chart 2: Execution Time Comparison ---
+    methods = ['PCD', 'GDA']
+    times = [pcd_time, gda_time]
+    colors = ['#ff9999', '#66b3ff']  # Light red and Light blue
 
-    # Focus on the convergence area
-    plt.ylim(0.40, 0.48)
+    bars = ax2.bar(methods, times, color=colors, alpha=0.8, width=0.5)
 
-    out_path = os.path.join(current_dir, 'final_comparison.png')
+    ax2.set_title('Execution Time Comparison')
+    ax2.set_ylabel('Time (seconds)')
+    ax2.set_ylim(0, max(times) * 1.2)  # Add some headroom for labels
+
+    # Add value labels on top of bars
+    for bar in bars:
+        height = bar.get_height()
+        ax2.text(bar.get_x() + bar.get_width() / 2., height,
+                 f'{height:.4f}s',
+                 ha='center', va='bottom', fontsize=11, fontweight='bold')
+
+    # Layout adjustments
+    plt.tight_layout()
+
+    out_path = os.path.join(current_dir, 'final_comparison_with_time.png')
     plt.savefig(out_path)
     print(f"\nChart saved to: {out_path}")
     plt.show()
