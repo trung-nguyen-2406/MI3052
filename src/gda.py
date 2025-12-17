@@ -30,13 +30,17 @@ def run_gda_solve(grad_func, proj_func, obj_func, x0, step_size, sigma, kappa, m
     """
     x = x0.clone().detach()
     
+    # Cache objective function value to avoid recomputing
+    obj_x = obj_func(x) if obj_func is not None else None
+    
     if return_history:
-        history = {'iterations': [], 'time': [], 'obj': []}
+        history = {'iterations': [], 'time': [], 'obj': [], 'x': [], 'converged_iter': None}
         start_time = time.time()
         # Record initial point
         history['iterations'].append(0)
         history['time'].append(0.0)
-        history['obj'].append(float(obj_func(x)))
+        history['obj'].append(float(obj_x))
+        history['x'].append(x.clone().detach())
     
     converged = False
     for k in range(int(max_iter)):
@@ -45,6 +49,7 @@ def run_gda_solve(grad_func, proj_func, obj_func, x0, step_size, sigma, kappa, m
             history['iterations'].append(k + 1)
             history['time'].append(time.time() - start_time)
             history['obj'].append(history['obj'][-1])  # Keep same objective value
+            history['x'].append(history['x'][-1].clone())
             continue
         
         g = grad_func(x)
@@ -60,24 +65,32 @@ def run_gda_solve(grad_func, proj_func, obj_func, x0, step_size, sigma, kappa, m
         else:
             x_new = y
         
-        # Armijo-type step size adjustment
-        if obj_func(x_new) > obj_func(x) - sigma * torch.inner(g, x - x_new):
+        # Compute objective at new point
+        obj_x_new = obj_func(x_new)
+        
+        # Armijo-type step size adjustment - use cached obj_x instead of recomputing
+        if obj_x_new > obj_x - sigma * torch.inner(g, x - x_new):
             step_size = kappa * step_size
         
         if return_history:
             history['iterations'].append(k + 1)
             history['time'].append(time.time() - start_time)
-            history['obj'].append(float(obj_func(x_new)))
+            history['obj'].append(float(obj_x_new))
+            history['x'].append(x_new.clone().detach())
         
         # Check convergence
         if torch.norm(x_new - x) < tol:
             x = x_new
+            obj_x = obj_x_new  # Update cached value
             if return_history:
+                if not converged:  # Record convergence iteration only once
+                    history['converged_iter'] = k + 1
                 converged = True  # Mark as converged but continue recording
             else:
                 break  # Only break if not tracking history
         else:
             x = x_new
+            obj_x = obj_x_new  # Update cached value for next iteration
     
     if return_history:
         return x, history
@@ -113,7 +126,8 @@ def run_gda_solve(grad_func, proj_func, obj_func, x0, step_size, sigma, kappa, m
 #         if obj_func is not None:
 #             history['obj'].append(float(obj_func(x_new, y_new)))
 #         # stopping
-#         if torch.norm(x_new - x) < tol and torch.norm(y_new - y) < tol:
+#         if torch.norm(x_new - x
+# ) < tol and torch.norm(y_new - y) < tol:
 #             x, y = x_new, y_new
 #             break
 #         x, y = x_new, y_new

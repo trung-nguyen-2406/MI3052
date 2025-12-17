@@ -54,7 +54,8 @@ def run_gd_solve(obj_func, grad_func, proj_func, x0, step_size,
     history = {
         'iterations': [],
         'time': [],
-        'obj': []
+        'obj': [],
+        'converged_iter': None
     } if return_history else None
     
     # Record initial point
@@ -92,6 +93,8 @@ def run_gd_solve(obj_func, grad_func, proj_func, x0, step_size,
         if torch.norm(x_new - x) < tol:
             x = x_new
             if return_history:
+                if not converged:  # Record convergence iteration only once
+                    history['converged_iter'] = k + 1
                 converged = True  # Mark as converged but continue recording
             else:
                 break  # Only break if not tracking history
