@@ -212,6 +212,8 @@ Lipschitz constant: L = 4β^(3/2)√n + 3α
 Step sizes:
     - GDA: λ₀ = 5/L (adaptive with Armijo-type condition)
     - GD:  λ = 1/L (fixed)
+    
+Convergence criterion: tolerance = 1e-6
     """)
     
     print("=" * 80)
@@ -234,11 +236,11 @@ Step sizes:
             grad_func=grad_func,
             proj_func=proj_func,
             obj_func=obj_func,
-            x0=torch.ones(n) * 36.0 ,
+            x0=torch.ones(n) * 360,
             step_size=lambda_gda,
             sigma=0.1,
             kappa=0.1,
-            max_iter=10,
+            max_iter=30,
             tol=1e-6,
             return_history=True
         )
@@ -246,27 +248,28 @@ Step sizes:
         results_gda.append(hist_gda)
         
         # ===== Run GD =====
-        # GD starts from a worse initial point (farther from optimal)
-        x0_gd = torch.ones(n) + torch.rand(n) * 3.0  # Larger perturbation
-        
         lambda_gd = 1.0 / L  # Standard 1/L step size for GD
         
         x_gd, hist_gd = run_gd_solve(
             obj_func=obj_func,
             grad_func=grad_func,
             proj_func=proj_func,
-            x0= torch.ones(n) * 36.0 ,  # Worse initialization for GD
+            x0=torch.ones(n) * 360,
             step_size=lambda_gd,
-            max_iter=10,
+            max_iter=30,
             tol=1e-6,
             return_history=True
         )
         
         results_gd.append(hist_gd)
         
-        # Print results
-        print(f"{n:<8}{'GDA':<12}{hist_gda['obj'][-1]:<15.4f}{len(hist_gda['iterations']):<12}{hist_gda['time'][-1]:<12.4f}")
-        print(f"{' ':<8}{'GD':<12}{hist_gd['obj'][-1]:<15.4f}{len(hist_gd['iterations']):<12}{hist_gd['time'][-1]:<12.4f}")
+        # Get actual number of iterations (length of history)
+        gda_iters = len(hist_gda['iterations'])
+        gd_iters = len(hist_gd['iterations'])
+        
+        # Print results with actual iteration count
+        print(f"{n:<8}{'GDA':<12}{hist_gda['obj'][-1]:<15.4f}{gda_iters:<12}{hist_gda['time'][-1]:<12.4f}")
+        print(f"{' ':<8}{'GD':<12}{hist_gd['obj'][-1]:<15.4f}{gd_iters:<12}{hist_gd['time'][-1]:<12.4f}")
         print()
     
     print("=" * 80)
