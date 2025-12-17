@@ -9,6 +9,7 @@ subject to x ∈ C
 Với C = {x = (x1, x2)^T ∈ R² | x1² + 2x1x2 ≥ 4; x1, x2 ≥ 0}
 """
 
+from random import random
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -224,8 +225,8 @@ def run_gda_method(problem: Problem, x0: np.ndarray, max_iter: int = 1000):
         step_size=1.0,
         sigma=0.1,
         kappa=0.5,
-        max_iter=max_iter,
-        tol=1e-8  # Tol phù hợp để dừng sớm khi hội tụ
+        max_iter=1000,
+        tol=1e-5  # Tol phù hợp để dừng sớm khi hội tụ
     )
     
     elapsed_time = time.time() - start_time
@@ -309,7 +310,8 @@ def main():
     print("="*70)
     
     problem = Problem()
-    x0 = np.array([2.0, 1.0])
+    np.random.seed(36)  # Seed cố định để tái hiện kết quả
+    x0 = np.random.uniform(0, 3, size=2)
     
     print(f"\nBài toán:")
     print(f"  minimize f(x) = (x₁² + x₂² + 3) / (1 + 2x₁ + 8x₂)")
