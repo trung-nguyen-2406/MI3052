@@ -56,9 +56,6 @@ class ConstrainedProblem:
         if self.constraint_g1(x) > tol:
             return False
         
-        if 1 + 2*x1 + 8*x2 <= tol:
-            return False
-        
         return True
     
     def project_to_feasible(self, x: np.ndarray) -> np.ndarray:
@@ -82,9 +79,6 @@ class ConstrainedProblem:
             
             if self.constraint_g1(x_proj) > 0:
                 x_proj[0] += step
-                x_proj[1] += step
-            
-            if 1 + 2*x_proj[0] + 8*x_proj[1] <= 0:
                 x_proj[1] += step
         
         return x_proj
