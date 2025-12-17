@@ -263,11 +263,11 @@ Convergence criterion: tolerance = 1e-6
         
         results_gd.append(hist_gd)
         
-        # Get actual number of iterations (length of history)
-        gda_iters = len(hist_gda['iterations'])
-        gd_iters = len(hist_gd['iterations'])
+        # Get actual convergence iterations (when ||x_new - x|| < tol)
+        gda_iters = hist_gda['converged_iter'] if hist_gda['converged_iter'] is not None else len(hist_gda['iterations']) - 1
+        gd_iters = hist_gd['converged_iter'] if hist_gd['converged_iter'] is not None else len(hist_gd['iterations']) - 1
         
-        # Print results with actual iteration count
+        # Print results with actual convergence iteration count
         print(f"{n:<8}{'GDA':<12}{hist_gda['obj'][-1]:<15.4f}{gda_iters:<12}{hist_gda['time'][-1]:<12.4f}")
         print(f"{' ':<8}{'GD':<12}{hist_gd['obj'][-1]:<15.4f}{gd_iters:<12}{hist_gd['time'][-1]:<12.4f}")
         print()
@@ -286,8 +286,8 @@ Convergence criterion: tolerance = 1e-6
     print("-" * 80)
     
     for idx, n in enumerate(n_values):
-        gda_iters = len(results_gda[idx]['iterations'])
-        gd_iters = len(results_gd[idx]['iterations'])
+        gda_iters = results_gda[idx]['converged_iter'] if results_gda[idx]['converged_iter'] is not None else len(results_gda[idx]['iterations']) - 1
+        gd_iters = results_gd[idx]['converged_iter'] if results_gd[idx]['converged_iter'] is not None else len(results_gd[idx]['iterations']) - 1
         speedup = gd_iters / gda_iters if gda_iters > 0 else 0
         print(f"{n:<10}{gda_iters:<15}{gd_iters:<15}{speedup:<15.2f}x")
     
