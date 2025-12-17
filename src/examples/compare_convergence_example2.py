@@ -2,6 +2,8 @@ import sys, pathlib
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 import torch
 import matplotlib.pyplot as plt
+import numpy as np
+from scipy.optimize import minimize
 from gda import run_gda_solve
 from rnn import run_rnn_solver
 
@@ -55,30 +57,45 @@ def constraint_h_ex2_neg(x):
 constraints_ex2 = [constraint_g1_ex2, constraint_g2_ex2, constraint_h_ex2_pos, constraint_h_ex2_neg]
 
 def proj_func_ex2(y_point, max_iters=100, learning_rate=0.01):
-    """Improved projection using penalty method with better convergence"""
-    device = torch.device("cpu")
-    x = y_point.clone().detach().to(device).requires_grad_(True)
-    optimizer = torch.optim.LBFGS([x], lr=learning_rate, max_iter=20, line_search_fn='strong_wolfe')
-    y_target = y_point.detach()
-
-    def closure():
-        optimizer.zero_grad()
-        objective_loss = 0.5 * torch.sum((x - y_target)**2)
-        
-        h_x = constraint_h_ex2(x)
-        equality_penalty = 10000 * (h_x**2)
-        
-        g1_x = constraint_g1_ex2(x)
-        g2_x = constraint_g2_ex2(x)
-        inequality_penalty = 10000 * (torch.max(torch.tensor(0.0).to(device), g1_x)**2 + 
-                                      torch.max(torch.tensor(0.0).to(device), g2_x)**2)
-        
-        total_loss = objective_loss + equality_penalty + inequality_penalty
-        total_loss.backward()
-        return total_loss
+    """Exact projection using scipy SLSQP optimizer"""
+    y_np = y_point.detach().cpu().numpy()
     
-    optimizer.step(closure)
-    return x.detach()
+    # Objective: minimize ||x - y||^2
+    def objective(x):
+        return np.sum((x - y_np)**2)
+    
+    def objective_grad(x):
+        return 2 * (x - y_np)
+    
+    # Inequality constraints: g(x) <= 0
+    def g1_np(x):
+        return (x[0] + x[2])**3 + 2 * x[1]**2 - 10.0
+    
+    def g2_np(x):
+        return (x[1] - 1)**2 - 1.0
+    
+    # Equality constraint: h(x) = 0
+    def h_np(x):
+        return 2 * x[0] + 4 * x[1] + x[2] + 1.0
+    
+    # Define constraints in scipy format
+    constraints_scipy = [
+        {'type': 'ineq', 'fun': lambda x: -g1_np(x)},  # -g1(x) >= 0 <=> g1(x) <= 0
+        {'type': 'ineq', 'fun': lambda x: -g2_np(x)},  # -g2(x) >= 0 <=> g2(x) <= 0
+        {'type': 'eq', 'fun': h_np}                     # h(x) = 0
+    ]
+    
+    # Solve projection problem
+    result = minimize(
+        objective,
+        y_np,
+        method='SLSQP',
+        jac=objective_grad,
+        constraints=constraints_scipy,
+        options={'maxiter': 200, 'ftol': 1e-9}
+    )
+    
+    return torch.tensor(result.x, dtype=y_point.dtype)
 
 
 def run_comparison():
@@ -98,6 +115,14 @@ def run_comparison():
     print(f"  Iterations: {len(hist_gda_ex2['iterations'])}")
     print(f"  Time: {hist_gda_ex2['time'][-1]:.4f}s")
     
+    # Check GDA feasibility
+    hist_gda_ex2['feasible'] = []
+    for x_point in hist_gda_ex2['x']:
+        is_feasible = all(g(x_point) <= 1e-4 for g in constraints_ex2)
+        hist_gda_ex2['feasible'].append(is_feasible)
+    feasible_gda_count = sum(hist_gda_ex2['feasible'])
+    print(f"  GDA Feasible iterations: {feasible_gda_count}/{len(hist_gda_ex2['feasible'])}")
+    
     print("\n[RNN] Running...")
     x_rnn_ex2, hist_rnn_ex2 = run_rnn_solver(
         grad_func_ex2, constraints_ex2, lambda x: obj_func_ex2(x, mu=0.01), x0_ex2,
@@ -110,10 +135,15 @@ def run_comparison():
     
     # Check feasibility statistics
     feasible_count = sum(1 for f in hist_rnn_ex2['feasible'] if f)
-    print(f"  Feasible iterations: {feasible_count}/{len(hist_rnn_ex2['feasible'])}")
+    print(f"  RNN Feasible iterations: {feasible_count}/{len(hist_rnn_ex2['feasible'])}")
     
     # Check final constraint violations
-    print(f"  Final constraint violations:")
+    print(f"\n  GDA Final constraint violations:")
+    for i, g in enumerate(constraints_ex2):
+        g_val = float(g(x_gda_ex2))
+        print(f"    g{i+1}(x) = {g_val:.6e} (should be <= 0)")
+    
+    print(f"\n  RNN Final constraint violations:")
     for i, g in enumerate(constraints_ex2):
         g_val = float(g(x_rnn_ex2))
         print(f"    g{i+1}(x) = {g_val:.6e} (should be <= 0)")
@@ -121,22 +151,34 @@ def run_comparison():
     # Plotting
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     
-    # Split RNN data into feasible and infeasible
-    feasible_iter = [hist_rnn_ex2['iterations'][i] for i in range(len(hist_rnn_ex2['feasible'])) if hist_rnn_ex2['feasible'][i]]
-    feasible_obj = [hist_rnn_ex2['obj'][i] for i in range(len(hist_rnn_ex2['feasible'])) if hist_rnn_ex2['feasible'][i]]
-    infeasible_iter = [hist_rnn_ex2['iterations'][i] for i in range(len(hist_rnn_ex2['feasible'])) if not hist_rnn_ex2['feasible'][i]]
-    infeasible_obj = [hist_rnn_ex2['obj'][i] for i in range(len(hist_rnn_ex2['feasible'])) if not hist_rnn_ex2['feasible'][i]]
+    # Split GDA data into feasible and infeasible
+    gda_feasible_iter = [hist_gda_ex2['iterations'][i] for i in range(len(hist_gda_ex2['feasible'])) if hist_gda_ex2['feasible'][i]]
+    gda_feasible_obj = [hist_gda_ex2['obj'][i] for i in range(len(hist_gda_ex2['feasible'])) if hist_gda_ex2['feasible'][i]]
+    gda_infeasible_iter = [hist_gda_ex2['iterations'][i] for i in range(len(hist_gda_ex2['feasible'])) if not hist_gda_ex2['feasible'][i]]
+    gda_infeasible_obj = [hist_gda_ex2['obj'][i] for i in range(len(hist_gda_ex2['feasible'])) if not hist_gda_ex2['feasible'][i]]
     
-    feasible_time = [hist_rnn_ex2['time'][i] for i in range(len(hist_rnn_ex2['feasible'])) if hist_rnn_ex2['feasible'][i]]
-    infeasible_time = [hist_rnn_ex2['time'][i] for i in range(len(hist_rnn_ex2['feasible'])) if not hist_rnn_ex2['feasible'][i]]
+    gda_feasible_time = [hist_gda_ex2['time'][i] for i in range(len(hist_gda_ex2['feasible'])) if hist_gda_ex2['feasible'][i]]
+    gda_infeasible_time = [hist_gda_ex2['time'][i] for i in range(len(hist_gda_ex2['feasible'])) if not hist_gda_ex2['feasible'][i]]
+    
+    # Split RNN data into feasible and infeasible
+    rnn_feasible_iter = [hist_rnn_ex2['iterations'][i] for i in range(len(hist_rnn_ex2['feasible'])) if hist_rnn_ex2['feasible'][i]]
+    rnn_feasible_obj = [hist_rnn_ex2['obj'][i] for i in range(len(hist_rnn_ex2['feasible'])) if hist_rnn_ex2['feasible'][i]]
+    rnn_infeasible_iter = [hist_rnn_ex2['iterations'][i] for i in range(len(hist_rnn_ex2['feasible'])) if not hist_rnn_ex2['feasible'][i]]
+    rnn_infeasible_obj = [hist_rnn_ex2['obj'][i] for i in range(len(hist_rnn_ex2['feasible'])) if not hist_rnn_ex2['feasible'][i]]
+    
+    rnn_feasible_time = [hist_rnn_ex2['time'][i] for i in range(len(hist_rnn_ex2['feasible'])) if hist_rnn_ex2['feasible'][i]]
+    rnn_infeasible_time = [hist_rnn_ex2['time'][i] for i in range(len(hist_rnn_ex2['feasible'])) if not hist_rnn_ex2['feasible'][i]]
     
     # By Iterations
     ax = axes[0]
-    ax.plot(hist_gda_ex2['iterations'], hist_gda_ex2['obj'], 'b-', linewidth=2, label='GDA')
-    if infeasible_iter:
-        ax.plot(infeasible_iter, infeasible_obj, '.', color='orange', markersize=3, alpha=0.5, label='RNN (infeasible)')
-    if feasible_iter:
-        ax.plot(feasible_iter, feasible_obj, 'r-', linewidth=2, label='RNN (feasible)')
+    # Plot GDA
+    if gda_feasible_iter:
+        ax.plot(gda_feasible_iter, gda_feasible_obj, 'b-', linewidth=2, label='GDA (feasible)')
+    # Plot RNN
+    if rnn_infeasible_iter:
+        ax.plot(rnn_infeasible_iter, rnn_infeasible_obj, '.', color='orange', markersize=3, alpha=0.5, label='RNN (infeasible)')
+    if rnn_feasible_iter:
+        ax.plot(rnn_feasible_iter, rnn_feasible_obj, 'r-', linewidth=2, label='RNN (feasible)')
     ax.set_xlabel('Iterations', fontsize=12)
     ax.set_ylabel('Objective Value f(x)', fontsize=12)
     ax.set_title('Example 2: Convergence by Iterations', fontsize=13, fontweight='bold')
@@ -145,11 +187,14 @@ def run_comparison():
     
     # By Time
     ax = axes[1]
-    ax.plot(hist_gda_ex2['time'], hist_gda_ex2['obj'], 'b-', linewidth=2, label='GDA')
-    if infeasible_time:
-        ax.plot(infeasible_time, infeasible_obj, '.', color='orange', markersize=3, alpha=0.5, label='RNN (infeasible)')
-    if feasible_time:
-        ax.plot(feasible_time, feasible_obj, 'r-', linewidth=2, label='RNN (feasible)')
+    # Plot GDA
+    if gda_feasible_time:
+        ax.plot(gda_feasible_time, gda_feasible_obj, 'b-', linewidth=2, label='GDA (feasible)')
+    # Plot RNN
+    if rnn_infeasible_time:
+        ax.plot(rnn_infeasible_time, rnn_infeasible_obj, '.', color='orange', markersize=3, alpha=0.5, label='RNN (infeasible)')
+    if rnn_feasible_time:
+        ax.plot(rnn_feasible_time, rnn_feasible_obj, 'r-', linewidth=2, label='RNN (feasible)')
     ax.set_xlabel('Time (seconds)', fontsize=12)
     ax.set_ylabel('Objective Value f(x)', fontsize=12)
     ax.set_title('Example 2: Convergence by Time', fontsize=13, fontweight='bold')
