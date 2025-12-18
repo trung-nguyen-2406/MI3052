@@ -165,87 +165,69 @@ def gda_solver(x0, lambda0, sigma, kappa, max_iter=100, tol=1e-8):
     return x, f(x), trajectory
 
 
-# --- 1.4. Neural-network / gradient-based comparator (không thay đổi GDA) ---
-def neural_network_solver(x0, lr=0.05, max_iter=50, penalty_weight=100.0):
-    """
-    So sánh bằng một phương pháp gradient bình thường:
-    - Nếu PyTorch có sẵn: treat x as an nn.Parameter (or a tiny network output) and
-      use SGD to minimize the objective + penalty for constraint violations.
-    - Nếu không: fallback to simple finite-difference gradient descent on x.
+# --- 1.4. Projected Gradient Descent (GD) solver ---
 
-    Trả về: final_x, f(final_x), trajectory (list of x at each iter)
+def projected_gradient_descent(x0, lambda0, max_iter=100, tol=1e-8):
     """
-    x0 = np.array(x0, dtype=float)
+    Projected Gradient Descent with fixed step size
+    
+    Algorithm:
+    1. y = x - lambda * grad_f(x)
+    2. x_new = P_C(y)  (projection onto constraint set)
+    3. Check convergence
+    
+    Args:
+        x0: initial point
+        lambda0: step size (learning rate)
+        max_iter: maximum iterations
+        tol: convergence tolerance
+    
+    Returns:
+        final_x, final_f, trajectory
+    """
+    x = np.array(x0, dtype=float)
+    lambda_k = float(lambda0)
     trajectory = []
-
-    if TORCH_AVAILABLE:
-        # Use a single parameter vector representing x
-        x_param = torch.nn.Parameter(torch.tensor(x0, dtype=torch.float32))
-        optimizer = torch.optim.SGD([x_param], lr=lr)
-
-        def f_torch(x_tensor):
-            x1 = x_tensor[0]
-            x2 = x_tensor[1]
-            u = x1 * x1 + x2 * x2 + 3.0
-            v = 1.0 + 2.0 * x1 + 8.0 * x2
-            # Penalize non-positive denominator heavily
-            if torch.abs(v) < 1e-6:
-                return torch.tensor(1e6, dtype=torch.float32)
-            return u / v
-
-        for k in range(max_iter):
-            optimizer.zero_grad()
-            x_t = x_param
-            loss_f = f_torch(x_t)
-
-            # Soft penalty if constraint violated: g(x) = 4 - (x1^2 + 2 x1 x2) <= 0
-            x1 = x_t[0]
-            x2 = x_t[1]
-            g_val = 4.0 - (x1 * x1 + 2.0 * x1 * x2)
-            penalty = torch.relu(g_val) ** 2 * penalty_weight
-            # Penalty for negative coordinates
-            penalty = penalty + (torch.relu(-x1) ** 2 + torch.relu(-x2) ** 2) * (penalty_weight * 0.1)
-
-            loss = loss_f + penalty
-            loss.backward()
-            optimizer.step()
-
-            x_np = x_param.detach().cpu().numpy().astype(float)
-            trajectory.append({'k': k, 'x': x_np.copy(), 'loss': float(loss.detach().cpu().numpy())})
-
-        final_x = trajectory[-1]['x'] if len(trajectory) > 0 else x0
-        return final_x, f(final_x), trajectory
-    else:
-        # Fallback: finite difference gradient descent on x (plain gradient method)
-        x = x0.copy()
-        eps = 1e-6
-        for k in range(max_iter):
-            # numerical gradient of L(x) = f(x) + penalty
-            grad = np.zeros(2)
-            base = f(x)
-            for i in range(2):
-                xp = x.copy(); xp[i] += eps
-                xm = x.copy(); xm[i] -= eps
-                grad[i] = (f(xp) - f(xm)) / (2*eps)
-
-            # add gradient from penalty: p(x) = relu(4 - (x1^2 + 2x1 x2))^2 * w
-            g_val = 4.0 - (x[0]**2 + 2.0 * x[0] * x[1])
-            if g_val > 0:
-                # d/dx of (g^2) = 2 g * dg/dx
-                dg_dx = np.array([-2.0*x[0] - 2.0*x[1], -2.0*x[0]])
-                grad += 2.0 * g_val * dg_dx * penalty_weight
-
-            # penalty for negative coordinates
-            for i in range(2):
-                if x[i] < 0:
-                    grad[i] += 2.0 * (x[i]) * (penalty_weight * 0.1)
-
-            # Update
-            x = x - lr * grad
-            trajectory.append({'k': k, 'x': x.copy(), 'loss': f(x)})
-
-        final_x = trajectory[-1]['x'] if len(trajectory) > 0 else x0
-        return final_x, f(final_x), trajectory
+    
+    print(f"Starting Projected GD. x0={x}, lambda={lambda_k}")
+    
+    for k in range(max_iter):
+        x_k = x.copy()
+        
+        # 1. Gradient step
+        grad_xk = grad_f(x_k)
+        if np.any(np.isinf(grad_xk)):
+            break
+        
+        # 2. Gradient descent step
+        y = x_k - lambda_k * grad_xk
+        
+        # 3. Project onto constraint set
+        x_new = projection_C(y)
+        
+        f_val = f(x_new)
+        
+        # Save trajectory data
+        trajectory.append({
+            'k': k,
+            'x_start': x_k.copy(),
+            'y_mid': y.copy(),
+            'x_end': x_new.copy(),
+            'lambda': lambda_k,
+            'f': f_val
+        })
+        
+        print(f"Iter {k}: λ={lambda_k:.6f} | x=({x_new[0]:.4f}, {x_new[1]:.4f}), f={f_val:.6f}")
+        
+        # 4. Check convergence
+        if np.linalg.norm(x_new - x_k) < tol:
+            x = x_new
+            print(f"✅ GD converged at step k={k}. x*={x}, λ={lambda_k:.6f}")
+            break
+        
+        x = x_new
+    
+    return x, f(x), trajectory
 
 # --- 2. Chạy Solver để lấy Dữ liệu cho Manim ---
 # Worse initialization far from optimal
@@ -264,9 +246,10 @@ final_x, final_f, trajectory_data = gda_solver(x0, lambda0, sigma, kappa, max_it
 
 print(f"\nConverged solution: {final_x}, Objective value: {final_f}")
 
-# --- Chạy phương pháp gradient bình thường (gradient descent with penalty) ---
-nn_final_x, nn_final_f, nn_trajectory = neural_network_solver(x0, lr=0.05, max_iter=40, penalty_weight=100.0)
-print(f"\nGradient method result: {nn_final_x}, f: {nn_final_f} (torch_enabled={TORCH_AVAILABLE})")
+# --- Chạy phương pháp Projected Gradient Descent ---
+gd_lambda = 0.1  # Fixed step size for GD
+gd_final_x, gd_final_f, gd_trajectory = projected_gradient_descent(x0, gd_lambda, max_iter=40)
+print(f"\nProjected GD result: {gd_final_x}, f: {gd_final_f}")
 
 # --- PHẦN 3: MINH HỌA QUÁ TRÌNH TÌM NGHIỆM BẰNG MANIM ---
 
@@ -438,7 +421,7 @@ class GDAProjectionAnimation(Scene):
 
 
 class CombinedComparisonAnimation(Scene):
-    """Animate GDA (left) and standard gradient method (right) side-by-side.
+    """Animate GDA (left) and Projected Gradient Descent (right) side-by-side.
     This does not change the original GDA algorithm implementation; it merely
     visualizes both methods together for direct comparison.
     """
@@ -447,7 +430,7 @@ class CombinedComparisonAnimation(Scene):
         X_RANGE = [0, 4]
         Y_RANGE = [0, 4]
 
-        # Left: GDA axes, Right: NN axes
+        # Left: GDA axes, Right: GD axes
         # Shift left axes further RIGHT to avoid hiding the x2 axis label
         axes_left = Axes(
             x_range=X_RANGE + [1], y_range=Y_RANGE + [1], x_length=6, y_length=6,
@@ -459,7 +442,7 @@ class CombinedComparisonAnimation(Scene):
             axis_config={"include_numbers": False}
         ).to_edge(RIGHT).shift(0.7*RIGHT)
 
-        title = Text("GDA (Left)  vs  Gradient Descent (Right)").scale(0.7).to_edge(UP)
+        title = Text("GDA (Left)  vs  GD (Right)").scale(0.7).to_edge(UP)
         # Appear axes and title sequentially
         self.play(Create(axes_left), run_time=0.7)
         self.play(Create(axes_right), run_time=0.7)
@@ -525,10 +508,10 @@ class CombinedComparisonAnimation(Scene):
         # Prepare initial markers
         gda_start = trajectory_data[0]['x_start'] if len(trajectory_data) > 0 else np.array(x0)
         gda_dot = Dot(axes_left.coords_to_point(gda_start[0], gda_start[1]), color=RED, radius=0.07)
-        nn_start = nn_trajectory[0]['x'] if len(nn_trajectory) > 0 else np.array(x0)
-        nn_dot = Dot(axes_right.coords_to_point(nn_start[0], nn_start[1]), color=ORANGE, radius=0.07)
+        gd_start = gd_trajectory[0]['x_start'] if len(gd_trajectory) > 0 else np.array(x0)
+        gd_dot = Dot(axes_right.coords_to_point(gd_start[0], gd_start[1]), color=ORANGE, radius=0.07)
 
-        self.add(gda_dot, nn_dot)
+        self.add(gda_dot, gd_dot)
 
         # info boxes for both methods
         # Position GDA info BELOW the constraint set definition
@@ -539,25 +522,26 @@ class CombinedComparisonAnimation(Scene):
             safe_math("\\kappa=%0.3f" % (kappa,), color=ORANGE)
         ).arrange(DOWN).scale(0.5).next_to(c_display, DOWN, buff=0.2)
 
-        nn_info = VGroup(
-            safe_math("Gradient: k=0", color=YELLOW_A),
+        gd_info = VGroup(
+            safe_math("GD: k=0", color=YELLOW_A),
             safe_math("x=(--, --)", color=WHITE),
-            safe_math("loss=--", color=GREEN)
+            safe_math("\\lambda=--", color=GREEN),
+            safe_math("f=--", color=TEAL)
         ).arrange(DOWN).scale(0.5).to_edge(RIGHT).shift(1*UP)
 
-        self.add(gda_info, nn_info)
+        self.add(gda_info, gd_info)
 
         # Draw trajectories step-by-step in sync for up to the longer length but render every `render_every` steps
         n_gda = len(trajectory_data)
-        n_nn = len(nn_trajectory)
-        n_steps = max(n_gda, n_nn)
+        n_gd = len(gd_trajectory)
+        n_steps = max(n_gda, n_gd)
 
         gda_path = VGroup()
-        nn_path = VGroup()
+        gd_path = VGroup()
 
         render_every = 2
         accumulated_gda = []
-        accumulated_nn = []
+        accumulated_gd = []
 
         for t in range(n_steps):
             # GDA step
@@ -570,17 +554,13 @@ class CombinedComparisonAnimation(Scene):
             else:
                 seg = None
 
-            # NN step
-            if t < n_nn:
-                s2 = nn_trajectory[t]
-                p_old2 = axes_right.coords_to_point(s2['x'][0], s2['x'][1])
-                # Next position (if available) otherwise keep
-                if t+1 < n_nn:
-                    p_new2 = axes_right.coords_to_point(nn_trajectory[t+1]['x'][0], nn_trajectory[t+1]['x'][1])
-                else:
-                    p_new2 = p_old2
+            # GD step
+            if t < n_gd:
+                s2 = gd_trajectory[t]
+                p_old2 = axes_right.coords_to_point(s2['x_start'][0], s2['x_start'][1])
+                p_new2 = axes_right.coords_to_point(s2['x_end'][0], s2['x_end'][1])
                 seg2 = Line(p_old2, p_new2, color=GREEN, stroke_width=2)
-                accumulated_nn.append(seg2)
+                accumulated_gd.append(seg2)
             else:
                 seg2 = None
 
@@ -599,41 +579,41 @@ class CombinedComparisonAnimation(Scene):
                     ).arrange(DOWN).scale(0.5).next_to(c_display, DOWN, buff=0.2)
                     self.play(Transform(gda_info, gda_info_new), run_time=0.2)
 
-                if t < n_nn:
-                    nval = nn_trajectory[t]
-                    nn_info_new = VGroup(
-                        safe_math(f"Gradient: k={nval['k']}", color=YELLOW_A),
-                        safe_math(f"x=({nval['x'][0]:.2f}, {nval['x'][1]:.2f})", color=WHITE),
-                        safe_math(f"loss={nval.get('loss', 0):.4f}", color=GREEN),
-                        safe_math(f"f={f(np.array(nval['x'])):.4f}", color=TEAL)
+                if t < n_gd:
+                    gval = gd_trajectory[t]
+                    gd_info_new = VGroup(
+                        safe_math(f"GD: k={gval['k']}", color=YELLOW_A),
+                        safe_math(f"x=({gval['x_end'][0]:.2f}, {gval['x_end'][1]:.2f})", color=WHITE),
+                        safe_math(f"\\lambda={gval['lambda']:.3f}", color=GREEN),
+                        safe_math(f"f={gval['f']:.4f}", color=TEAL)
                     ).arrange(DOWN).scale(0.5).to_edge(RIGHT).shift(1*UP)
-                    self.play(Transform(nn_info, nn_info_new), run_time=0.2)
+                    self.play(Transform(gd_info, gd_info_new), run_time=0.2)
 
                 if len(accumulated_gda) > 0:
                     self.play(*[Create(sg) for sg in accumulated_gda], run_time=0.6)
                     gda_path.add(*accumulated_gda)
                     accumulated_gda = []
 
-                if len(accumulated_nn) > 0:
-                    self.play(*[Create(sg) for sg in accumulated_nn], run_time=0.6)
-                    nn_path.add(*accumulated_nn)
-                    accumulated_nn = []
+                if len(accumulated_gd) > 0:
+                    self.play(*[Create(sg) for sg in accumulated_gd], run_time=0.6)
+                    gd_path.add(*accumulated_gd)
+                    accumulated_gd = []
 
                 # move dots visibly
                 if t < n_gda:
                     self.play(Transform(gda_dot, Dot(axes_left.coords_to_point(trajectory_data[t]['x_end'][0], trajectory_data[t]['x_end'][1]), color=RED, radius=0.07)), run_time=0.4)
-                if t < n_nn:
-                    self.play(Transform(nn_dot, Dot(axes_right.coords_to_point(nn_trajectory[t]['x'][0], nn_trajectory[t]['x'][1]), color=ORANGE, radius=0.07)), run_time=0.4)
+                if t < n_gd:
+                    self.play(Transform(gd_dot, Dot(axes_right.coords_to_point(gd_trajectory[t]['x_end'][0], gd_trajectory[t]['x_end'][1]), color=ORANGE, radius=0.07)), run_time=0.4)
 
         # Highlight final points
         final_gda = Dot(axes_left.coords_to_point(final_x[0], final_x[1]), color=PURPLE, radius=0.12)
-        final_nn = Dot(axes_right.coords_to_point(nn_final_x[0], nn_final_x[1]), color=PURPLE, radius=0.12)
-        self.play(Transform(gda_dot, final_gda), Transform(nn_dot, final_nn), run_time=1.5)
+        final_gd = Dot(axes_right.coords_to_point(gd_final_x[0], gd_final_x[1]), color=PURPLE, radius=0.12)
+        self.play(Transform(gda_dot, final_gda), Transform(gd_dot, final_gd), run_time=1.5)
 
         # Display final objective values for both methods
         final_stats = VGroup(
             safe_math(f"GDA: x* = ({final_x[0]:.4f}, {final_x[1]:.4f}), f={final_f:.6f}", color=WHITE),
-            safe_math(f"Gradient: x = ({nn_final_x[0]:.4f}, {nn_final_x[1]:.4f}), f={nn_final_f:.6f}", color=WHITE)
+            safe_math(f"GD: x = ({gd_final_x[0]:.4f}, {gd_final_x[1]:.4f}), f={gd_final_f:.6f}", color=WHITE)
         ).arrange(DOWN).to_edge(DOWN)
         self.play(Write(final_stats))
 
