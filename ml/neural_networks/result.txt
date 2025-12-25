@@ -1,0 +1,23 @@
+Mục 5.3: Ứng dụng Mạng nơ-ron cho bài toán phân loại (Neural networks for classification)
+Dữ liệu: CIFAR-10
+Mô hình: ResNet-18
+
+--- Thư viện yêu cầu ---
+torch
+torchvision
+matplotlib
+
+--- Kết quả thực nghiệm (50 Epochs) ---
+1. Độ chính xác (Test Accuracy):
+   - SGDA (Thuật toán đề xuất): Đạt độ chính xác cao nhất khoảng ~76.5%.
+   - SGD (Đối chứng): Đạt độ chính xác khoảng ~75.5%.
+   => SGDA cho kết quả phân loại tốt hơn SGD.
+
+2. Tốc độ hội tụ và độ ổn định:
+   - SGDA hội tụ nhanh hơn hẳn SGD ngay từ những epoch đầu tiên (đường màu xanh vọt lên nhanh hơn).
+   - Trong quá trình huấn luyện, SGDA hoạt động ổn định và mượt mà hơn, trong khi SGD có hiện tượng dao động (fluctuation) khá mạnh ở giai đoạn giữa.
+
+3. Hàm mất mát (Training Loss):
+   - Loss của SGDA giảm sâu hơn và nhanh hơn so với SGD, chứng tỏ thuật toán tối ưu tốt hơn trên tập dữ liệu này.
+
+=> Kết luận: Xem hình ảnh trực quan tại file result.png. Kết quả thực nghiệm khẳng định tính hiệu quả của thuật toán SGDA so với SGD truyền thống.
